@@ -15,4 +15,5 @@ public class FeedItem {
     private String region;
     private String videoUrl;
     private String description;
+    private boolean likedYou;
 }
