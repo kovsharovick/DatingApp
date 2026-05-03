@@ -3,6 +3,8 @@ package org.example.model;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
+import java.util.List;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -33,4 +35,12 @@ public class RegisterRequest {
 
     @Size(max = 500)
     private String description;
+
+    private Integer minAge;
+
+    private Integer maxAge;
+
+    private Integer radiusKm;
+
+    private List<Gender> preferredGenders;
 }

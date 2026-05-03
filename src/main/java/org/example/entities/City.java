@@ -27,4 +27,7 @@ public class City {
 
     @Column(nullable = false)
     private Double longitude;
+
+    @Column(name = "earth_point", columnDefinition = "point")
+    private String earthPoint;
 }

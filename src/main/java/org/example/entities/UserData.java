@@ -1,10 +1,13 @@
 package org.example.entities;
 
+import io.hypersistence.utils.hibernate.type.array.ListArrayType;
 import lombok.*;
 import jakarta.persistence.*;
 import org.example.model.Gender;
+import org.hibernate.annotations.Type;
 
 import java.time.*;
+import java.util.List;
 
 @Entity
 @Table(name = "user_data")
@@ -54,6 +57,19 @@ public class UserData {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Type(ListArrayType.class)
+    @Column(name = "preferred_gender", columnDefinition = "public.\"GENDER\"[]")
+    private List<Gender> preferredGenders;
+
+    @Column(name = "min_age")
+    private Integer minAge;
+
+    @Column(name = "max_age")
+    private Integer maxAge;
+
+    @Column(name = "radius_km")
+    private Integer radiusKm;
 
     @PrePersist
     public void prePersist() {
