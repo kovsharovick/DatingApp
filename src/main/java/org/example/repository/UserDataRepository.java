@@ -26,8 +26,9 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
                     WHERE sw.target_id = :currentUserId AND sw.direction = 'LIKE'
                 )
                 AND u.is_hidden = FALSE
+                AND u.active_video_id IS NOT NULL
                 AND u.id <> :currentUserId
-                AND (:prefs IS NULL OR u.gender = ANY(CAST(:prefs AS public.\\"GENDER\\"[])))
+                AND (:prefs IS NULL OR u.gender = ANY(CAST(:prefs AS public."GENDER"[])))
                 AND u.date_of_birth BETWEEN :minBirth AND :maxBirth
                 AND earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) <= :radiusMetres
                 AND u.id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = :currentUserId)
@@ -56,8 +57,9 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
                 JOIN city c ON u.city_id = c.id
                 LEFT JOIN user_videos v ON u.active_video_id = v.id
                 WHERE u.is_hidden = FALSE
+                  AND u.active_video_id IS NOT NULL
                   AND u.id <> :currentUserId
-                  AND (:prefs IS NULL OR u.gender = ANY(CAST(:prefs AS public.\"GENDER\"[])))
+                  AND (:prefs IS NULL OR u.gender = ANY(CAST(:prefs AS public."GENDER"[])))
                   AND u.date_of_birth BETWEEN :minBirth AND :maxBirth
                   AND earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) <= :radiusMetres
                   AND u.id NOT IN (
@@ -93,6 +95,7 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
                 JOIN city c ON u.city_id = c.id
                 LEFT JOIN user_videos v ON u.active_video_id = v.id
                 WHERE u.is_hidden = FALSE
+                  AND u.active_video_id IS NOT NULL
                   AND u.id <> :currentUserId
                   AND u.id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = :currentUserId)
                   AND u.id NOT IN (SELECT blocker_id FROM user_blocks WHERE blocked_id = :currentUserId)
