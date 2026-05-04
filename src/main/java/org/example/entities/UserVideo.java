@@ -23,10 +23,11 @@ public class UserVideo {
     private UserData user;
 
     @Column(name = "video_url", nullable = false)
-    private String videoUrl;    // путь в MinIO
+    private String videoUrl;
 
-    @Column(name = "thumbnail_url", nullable = false)
-    private String thumbnailUrl; // путь к превью
+    //nullable = false
+    @Column(name = "thumbnail_url")
+    private String thumbnailUrl;
 
     @Column(name = "duration_sec", nullable = false)
     private Integer durationSec;
