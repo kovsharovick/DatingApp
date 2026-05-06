@@ -1,13 +1,18 @@
 package org.example.entities;
 
-import io.hypersistence.utils.hibernate.type.array.ListArrayType;
+import io.hypersistence.utils.hibernate.type.array.EnumArrayType;
+import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.Parameter;
 import lombok.*;
 import jakarta.persistence.*;
 import org.example.model.Gender;
 import org.hibernate.annotations.Type;
 
 import java.time.*;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "user_data")
@@ -40,9 +45,11 @@ public class UserData {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @ColumnTransformer(write = "CAST(? AS public.\"GENDER\")")
     private Gender gender;
 
     @Column(columnDefinition = "TEXT DEFAULT ''")
+    @Builder.Default
     private String description = "";
 
     @OneToOne(fetch = FetchType.LAZY)
@@ -50,6 +57,7 @@ public class UserData {
     private UserVideo activeVideo;
 
     @Column(name = "is_hidden", nullable = false)
+    @Builder.Default
     private boolean hidden = false;
 
     @Column(name = "created_at", updatable = false)
@@ -58,8 +66,14 @@ public class UserData {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Type(ListArrayType.class)
-    @Column(name = "preferred_gender", columnDefinition = "public.\"GENDER\"[]")
+    @Column(name = "preferred_gender", columnDefinition = "text")
+    private String preferredGenderJson;
+
+    /**
+     * Вспомогательное transient-поле для работы со списком Gender.
+     * Используйте его в сервисах, оно не сохраняется в БД автоматически.
+     */
+    @Transient
     private List<Gender> preferredGenders;
 
     @Column(name = "min_age")
@@ -80,5 +94,26 @@ public class UserData {
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public List<Gender> getPreferredGenders() {
+        if (preferredGenderJson == null || preferredGenderJson.isBlank()) {
+            return new ArrayList<>();
+        }
+        // Простейшая реализация: разделение запятой, без пробелов
+        return Arrays.stream(preferredGenderJson.split(","))
+                .map(Gender::valueOf)
+                .collect(Collectors.toList());
+    }
+
+    public void setPreferredGenders(List<Gender> genders) {
+        this.preferredGenders = genders;
+        if (genders == null || genders.isEmpty()) {
+            this.preferredGenderJson = null;
+        } else {
+            this.preferredGenderJson = genders.stream()
+                    .map(Gender::name)
+                    .collect(Collectors.joining(","));
+        }
     }
 }

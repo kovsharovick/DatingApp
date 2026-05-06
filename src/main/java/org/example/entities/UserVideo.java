@@ -33,12 +33,15 @@ public class UserVideo {
     private Integer durationSec;
 
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private boolean active = false;
 
     @Column(name = "views_count", nullable = false)
+    @Builder.Default
     private int viewsCount = 0;
 
     @Column(name = "likes_count", nullable = false)
+    @Builder.Default
     private int likesCount = 0;
 
     @Column(name = "created_at", updatable = false)
