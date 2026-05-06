@@ -22,10 +22,10 @@ public class City {
     @Column(nullable = false)
     private String region;
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "numeric")
     private Double latitude;
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "numeric")
     private Double longitude;
 
     @Column(name = "earth_point", columnDefinition = "point")

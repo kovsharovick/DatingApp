@@ -1,8 +1,11 @@
 package org.example.entities;
 
+import io.hypersistence.utils.hibernate.type.array.EnumArrayType;
 import lombok.*;
 import org.example.model.SwipeDirection;
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.Type;
 
 import java.time.*;
 
@@ -32,6 +35,7 @@ public class UserSwipe {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @ColumnTransformer(write = "CAST(? AS public.\"SWIPE\")")
     private SwipeDirection direction;
 
     @PrePersist
