@@ -69,10 +69,6 @@ public class UserData {
     @Column(name = "preferred_gender", columnDefinition = "text")
     private String preferredGenderJson;
 
-    /**
-     * Вспомогательное transient-поле для работы со списком Gender.
-     * Используйте его в сервисах, оно не сохраняется в БД автоматически.
-     */
     @Transient
     private List<Gender> preferredGenders;
 

@@ -1,5 +1,6 @@
 package org.example.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.model.UserProfileResponse;
@@ -8,25 +9,26 @@ import org.example.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
+
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Tag(name = "Users", description = "Управление профилем пользователя")
 public class UserController {
 
     private final UserService userService;
 
-    // todo получение токена, а не ID
-    @GetMapping("/{userId}")
-    public ResponseEntity<UserProfileResponse> getProfile(@PathVariable Long userId) {
+    @GetMapping("/me")
+    public ResponseEntity<UserProfileResponse> getProfile(Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
         UserProfileResponse profile = userService.getProfile(userId);
         return ResponseEntity.ok(profile);
     }
 
-    // todo заменить ID на токен
-    @PutMapping("/{userId}")
-    public ResponseEntity<UserProfileResponse> updateProfile(
-            @PathVariable Long userId,
-            @Valid @RequestBody UserUpdateRequest request) {
+    @PutMapping("/me")
+    public ResponseEntity<UserProfileResponse> updateProfile(Principal principal, @Valid @RequestBody UserUpdateRequest request) {
+        Long userId = Long.parseLong(principal.getName());
         UserProfileResponse updatedProfile = userService.updateProfile(userId, request);
         return ResponseEntity.ok(updatedProfile);
     }
