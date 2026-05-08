@@ -12,7 +12,7 @@ import java.util.List;
 @Builder
 public class UserUpdateRequest {
 
-    @Size(max = 100)
+    @NotBlank @Size(max = 100)
     private String name;
 
     private String dateOfBirth;
