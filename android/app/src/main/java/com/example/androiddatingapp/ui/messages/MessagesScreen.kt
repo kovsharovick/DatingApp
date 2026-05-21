@@ -36,11 +36,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import com.example.androiddatingapp.ui.components.FeatureBlockOverlay
 
 @Composable
 fun MessagesScreen(
-    isProfileActive: Boolean,
-    onOpenSettings: () -> Unit,
+    hasVideo: Boolean,
+    onOpenProfile: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -90,7 +91,7 @@ fun MessagesScreen(
             if (selectedChat == null) {
                 ChatsList(
                     chats = chats,
-                    enabled = isProfileActive,
+                    enabled = hasVideo,
                     onOpenChat = { selectedChatId = it },
                     scaleDp = scaleDp,
                     scaleSp = scaleSp,
@@ -99,7 +100,7 @@ fun MessagesScreen(
             } else {
                 ChatDetail(
                     chat = selectedChat,
-                    enabled = isProfileActive,
+                    enabled = hasVideo,
                     onBack = { selectedChatId = null },
                     scaleDp = scaleDp,
                     scaleSp = scaleSp,
@@ -108,11 +109,14 @@ fun MessagesScreen(
             }
         }
 
-        if (!isProfileActive) {
-            PausedOverlay(
+        if (!hasVideo) {
+            FeatureBlockOverlay(
+                title = "Нужно видео анкеты",
+                message = "Загрузите видео в профиле, чтобы открыть сообщения.",
+                actionText = "Перейти в профиль",
+                onAction = onOpenProfile,
                 scaleDp = scaleDp,
                 scaleSp = scaleSp,
-                onOpenSettings = onOpenSettings,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -334,50 +338,6 @@ private fun ChatDetail(
                 enabled = enabled && draft.isNotBlank()
             ) {
                 Text("Отпр.", fontSize = scaleSp(13f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun PausedOverlay(
-    scaleDp: (Float) -> Dp,
-    scaleSp: (Float) -> TextUnit,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.45f))
-            .clickable(enabled = true, onClick = { /* consume */ }),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(scaleDp(16f))
-                .clip(RoundedCornerShape(scaleDp(18f)))
-                .background(Color(0xFF101827))
-                .padding(scaleDp(16f)),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Анкета на паузе",
-                fontSize = scaleSp(16f),
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White
-            )
-            Spacer(Modifier.height(scaleDp(8f)))
-            Text(
-                text = "Возобнови показ анкеты в настройках, чтобы снова писать сообщения.",
-                fontSize = scaleSp(13f),
-                color = Color.White.copy(alpha = 0.85f)
-            )
-            Spacer(Modifier.height(scaleDp(12f)))
-            Button(
-                onClick = onOpenSettings,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-            ) {
-                Text(text = "Перейти в настройки", fontSize = scaleSp(13f), color = Color.White)
             }
         }
     }

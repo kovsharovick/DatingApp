@@ -42,23 +42,52 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import com.example.androiddatingapp.ui.components.ExpandableDescription
+import com.example.androiddatingapp.ui.components.FeatureBlockOverlay
 import com.example.androiddatingapp.ui.model.ProfileUi
 import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
+    hasVideo: Boolean,
     isProfileActive: Boolean,
+    onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
 ) {
+    val feedEnabled = hasVideo && isProfileActive
     val profiles = remember {
         listOf(
-            ProfileUi(name = "Анастасия", age = 23, city = "Москва"),
-            ProfileUi(name = "София", age = 22, city = "Санкт‑Петербург"),
-            ProfileUi(name = "Мария", age = 25, city = "Казань"),
-            ProfileUi(name = "Екатерина", age = 24, city = "Новосибирск")
+            ProfileUi(
+                name = "Анастасия",
+                age = 23,
+                city = "Москва",
+                description = "Люблю прогулки, кофе и хорошие разговоры. Ищу человека с чувством юмора."
+            ),
+            ProfileUi(
+                name = "София",
+                age = 22,
+                city = "Санкт‑Петербург",
+                description = "Дизайнер, обожаю музеи и закаты у Невы. " +
+                    "На выходных часто в теннисе или на концертах. " +
+                    "Хочу познакомиться с тем, кто ценит искренность и не боится спонтанных поездок за город."
+            ),
+            ProfileUi(
+                name = "Мария",
+                age = 25,
+                city = "Казань",
+                description = "Работаю в IT, увлекаюсь йогой."
+            ),
+            ProfileUi(
+                name = "Екатерина",
+                age = 24,
+                city = "Новосибирск",
+                description = "Книги, путешествия и домашние вечера с плейлистом джаза. " +
+                    "Расскажу лучшие места в городе и с удовольствием выслушаю твои истории. " +
+                    "Важно, чтобы было о чём поговорить после первого свайпа."
+            )
         )
     }
     var currentProfileIndex by remember { mutableIntStateOf(0) }
@@ -71,7 +100,7 @@ fun HomeScreen(
     ) {
         SwipeableVideoCard(
             profile = currentProfile,
-            enabled = isProfileActive,
+            enabled = feedEnabled,
             scaleDp = scaleDp,
             scaleSp = scaleSp,
             modifier = Modifier.fillMaxSize(),
@@ -79,8 +108,17 @@ fun HomeScreen(
             onLike = { currentProfileIndex = (currentProfileIndex + 1) % profiles.size }
         )
 
-        if (!isProfileActive) {
-            PausedOverlay(
+        when {
+            !hasVideo -> FeatureBlockOverlay(
+                title = "Нужно видео анкеты",
+                message = "Загрузите видео в профиле, чтобы листать ленту и переписываться.",
+                actionText = "Перейти в профиль",
+                onAction = onOpenProfile,
+                scaleDp = scaleDp,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxSize()
+            )
+            !isProfileActive -> PausedOverlay(
                 scaleDp = scaleDp,
                 scaleSp = scaleSp,
                 onOpenSettings = onOpenSettings,
@@ -189,7 +227,7 @@ private fun SwipeableVideoCard(
         }
 
         if (enabled && showAction) {
-            val actionColor = if (isLike) Color(0xFF22C55E) else Color(0xFFEF4444)
+            val actionColor = if (isLike) Color(0xFF2563EB) else Color(0xFFEF4444)
             val alpha = (0.20f + 0.80f * progress).coerceIn(0f, 1.0f)
             val edgeWidth = scaleDp(84f)
 
@@ -257,7 +295,7 @@ private fun PausedOverlay(
             )
             Spacer(Modifier.height(scaleDp(8f)))
             Text(
-                text = "Возобнови показ анкеты в настройках, чтобы снова листать ленту.",
+                text = "Возобнови показ анкеты в настройках, чтобы снова появляться в ленте. Сообщения остаются доступны.",
                 fontSize = scaleSp(13f),
                 color = Color.White.copy(alpha = 0.85f)
             )
@@ -280,25 +318,33 @@ private fun ProfileInfoStrip(
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Column(
         modifier
+            .fillMaxWidth()
             .clip(RoundedCornerShape(scaleDp(16f)))
             .background(Color.Black.copy(alpha = 0.38f))
-            .padding(horizontal = scaleDp(14f), vertical = scaleDp(12f)),
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = scaleDp(14f), vertical = scaleDp(12f))
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = "${profile.name}, ${profile.age}",
-                fontSize = scaleSp(18f),
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White
-            )
-            Spacer(Modifier.height(scaleDp(4f)))
-            Text(
-                text = profile.city,
-                fontSize = scaleSp(14f),
-                color = Color.White.copy(alpha = 0.85f)
+        Text(
+            text = "${profile.name}, ${profile.age}",
+            fontSize = scaleSp(18f),
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
+        )
+        Spacer(Modifier.height(scaleDp(4f)))
+        Text(
+            text = profile.city,
+            fontSize = scaleSp(14f),
+            color = Color.White.copy(alpha = 0.85f)
+        )
+        if (profile.description.isNotBlank()) {
+            Spacer(Modifier.height(scaleDp(8f)))
+            ExpandableDescription(
+                text = profile.description,
+                fontSize = scaleSp(13f),
+                textColor = Color.White.copy(alpha = 0.9f),
+                linkColor = Color(0xFF93C5FD),
+                collapsedMaxLines = 1,
             )
         }
     }

@@ -42,29 +42,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import com.example.androiddatingapp.ui.components.ExpandableDescription
+import com.example.androiddatingapp.ui.components.PasswordTextField
+import com.example.androiddatingapp.ui.model.UserAccount
+import com.example.androiddatingapp.ui.util.formatAgeLabel
+
+private const val DESCRIPTION_MAX_LENGTH = 500
+
+private fun profileCityAgeLine(city: String, ageYears: Int?): String =
+    when (val age = ageYears) {
+        null -> city
+        else -> "$city, ${formatAgeLabel(age)}"
+    }
+
+private fun UserAccount.toProfileUi(): UserProfileUi = UserProfileUi(
+    name = name,
+    age = ageYears()?.toString().orEmpty(),
+    city = city,
+    description = description,
+    avatarSeed = avatarSeed,
+    videoTitle = when {
+        videoTitle.isNotBlank() -> videoTitle
+        hasVideo -> "video_profile.mp4"
+        else -> ""
+    },
+)
 
 @Composable
 fun ProfileScreen(
-    isProfileActive: Boolean,
+    account: UserAccount,
+    onAccountUpdate: (UserAccount) -> Unit,
     openSettings: Boolean,
     onOpenSettingsConsumed: () -> Unit,
-    onToggleProfileActive: (Boolean) -> Unit,
     onLogout: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
 ) {
-    var profile by remember {
-        mutableStateOf(
-            UserProfileUi(
-                name = "Анастасия",
-                age = "23",
-                city = "Москва",
-                avatarSeed = 1,
-                videoTitle = "video_profile_v1.mp4"
-            )
-        )
-    }
+    val profile = account.toProfileUi()
 
     var editSheetOpen by remember { mutableStateOf(false) }
     var settingsSheetOpen by remember { mutableStateOf(false) }
@@ -83,6 +98,7 @@ fun ProfileScreen(
             ProfilePreviewScreen(
                 profile = profile,
                 onBack = { showPreview = false },
+                onChangeVideo = { changeVideoSheetOpen = true },
                 scaleDp = scaleDp,
                 scaleSp = scaleSp,
                 modifier = Modifier.fillMaxSize()
@@ -90,10 +106,12 @@ fun ProfileScreen(
         } else {
             ProfileMainScreen(
                 profile = profile,
+                cityAgeLine = profileCityAgeLine(account.city, account.ageYears()),
+                hasVideo = account.hasVideo,
                 onOpenPreview = { showPreview = true },
+                onUploadVideo = { changeVideoSheetOpen = true },
                 onOpenEdit = { editSheetOpen = true },
                 onOpenSettings = { settingsSheetOpen = true },
-                onOpenChangeVideo = { changeVideoSheetOpen = true },
                 scaleDp = scaleDp,
                 scaleSp = scaleSp,
                 modifier = Modifier.fillMaxSize()
@@ -106,7 +124,14 @@ fun ProfileScreen(
             initial = profile,
             onDismiss = { editSheetOpen = false },
             onSave = { updated ->
-                profile = updated
+                onAccountUpdate(
+                    account.copy(
+                        name = updated.name,
+                        city = updated.city,
+                        description = updated.description.take(DESCRIPTION_MAX_LENGTH),
+                        avatarSeed = updated.avatarSeed,
+                    )
+                )
                 editSheetOpen = false
             },
             scaleDp = scaleDp,
@@ -118,8 +143,10 @@ fun ProfileScreen(
         SettingsSheet(
             profile = profile,
             onDismiss = { settingsSheetOpen = false },
-            isProfileActive = isProfileActive,
-            onToggleProfileActive = onToggleProfileActive,
+            isProfileActive = account.isProfileActive,
+            onToggleProfileActive = { active ->
+                onAccountUpdate(account.copy(isProfileActive = active))
+            },
             onChangePassword = { changePasswordOpen = true },
             onLogout = onLogout,
             scaleDp = scaleDp,
@@ -133,7 +160,12 @@ fun ProfileScreen(
             onDismiss = { changeVideoSheetOpen = false },
             onUploadNewVideo = {
                 videoVersion += 1
-                profile = profile.copy(videoTitle = "video_profile_v$videoVersion.mp4")
+                onAccountUpdate(
+                    account.copy(
+                        hasVideo = true,
+                        videoTitle = "video_profile_v$videoVersion.mp4",
+                    )
+                )
                 changeVideoSheetOpen = false
             },
             scaleDp = scaleDp,
@@ -154,17 +186,20 @@ private data class UserProfileUi(
     val name: String,
     val age: String,
     val city: String,
+    val description: String,
     val avatarSeed: Int,
-    val videoTitle: String
+    val videoTitle: String,
 )
 
 @Composable
 private fun ProfileMainScreen(
     profile: UserProfileUi,
+    cityAgeLine: String,
+    hasVideo: Boolean,
     onOpenPreview: () -> Unit,
+    onUploadVideo: () -> Unit,
     onOpenEdit: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenChangeVideo: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -212,7 +247,7 @@ private fun ProfileMainScreen(
                 )
                 Spacer(Modifier.height(scaleDp(4f)))
                 Text(
-                    text = "${profile.age} • ${profile.city}",
+                    text = cityAgeLine,
                     fontSize = scaleSp(13f),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                     maxLines = 1,
@@ -233,13 +268,23 @@ private fun ProfileMainScreen(
 
         Spacer(Modifier.height(scaleDp(12f)))
 
+        DescriptionCard(
+            description = profile.description,
+            scaleDp = scaleDp,
+            scaleSp = scaleSp,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(scaleDp(12f)))
+
         VideoCard(
             title = "Видео анкета",
-            subtitle = profile.videoTitle,
+            subtitle = if (hasVideo) profile.videoTitle else "Видео не загружено",
+            hasVideo = hasVideo,
             scaleDp = scaleDp,
             scaleSp = scaleSp,
             onPreview = onOpenPreview,
-            onUploadNew = onOpenChangeVideo,
+            onUploadVideo = onUploadVideo,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -251,6 +296,7 @@ private fun ProfileMainScreen(
 private fun ProfilePreviewScreen(
     profile: UserProfileUi,
     onBack: () -> Unit,
+    onChangeVideo: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -281,10 +327,10 @@ private fun ProfilePreviewScreen(
 
         Spacer(Modifier.height(scaleDp(12f)))
 
-        // Полноэкранный "видеоплеер" пока как заглушка.
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(scaleDp(18f)))
                 .background(Color(0xFF101827)),
             contentAlignment = Alignment.Center
@@ -293,6 +339,54 @@ private fun ProfilePreviewScreen(
                 text = "Видео: ${profile.videoTitle}",
                 fontSize = scaleSp(14f),
                 color = Color.White.copy(alpha = 0.9f)
+            )
+        }
+
+        Spacer(Modifier.height(scaleDp(12f)))
+
+        Button(
+            onClick = onChangeVideo,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+        ) {
+            Text(text = "Изменить видео", fontSize = scaleSp(14f), color = Color.White)
+        }
+    }
+}
+
+@Composable
+private fun DescriptionCard(
+    description: String,
+    scaleDp: (Float) -> Dp,
+    scaleSp: (Float) -> TextUnit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(scaleDp(18f)))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(scaleDp(14f))
+    ) {
+        Text(
+            text = "О себе",
+            fontSize = scaleSp(16f),
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(scaleDp(8f)))
+        if (description.isBlank()) {
+            Text(
+                text = "Добавьте описание в разделе «Редакт.»",
+                fontSize = scaleSp(13f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        } else {
+            ExpandableDescription(
+                text = description,
+                fontSize = scaleSp(13f),
+                textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                linkColor = MaterialTheme.colorScheme.primary,
+                collapsedMaxLines = 1,
             )
         }
     }
@@ -341,8 +435,9 @@ private fun Avatar(
 private fun VideoCard(
     title: String,
     subtitle: String,
+    hasVideo: Boolean,
     onPreview: () -> Unit,
-    onUploadNew: () -> Unit,
+    onUploadVideo: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -361,23 +456,6 @@ private fun VideoCard(
         )
         Spacer(Modifier.height(scaleDp(6f)))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(scaleDp(180f))
-                .clip(RoundedCornerShape(scaleDp(16f)))
-                .background(Color(0xFF101827)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Превью видео",
-                fontSize = scaleSp(14f),
-                color = Color.White.copy(alpha = 0.9f)
-            )
-        }
-
-        Spacer(Modifier.height(scaleDp(10f)))
-
         Text(
             text = subtitle,
             fontSize = scaleSp(12f),
@@ -386,24 +464,23 @@ private fun VideoCard(
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(Modifier.height(scaleDp(10f)))
+        Spacer(Modifier.height(scaleDp(12f)))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(scaleDp(10f))
-        ) {
-            OutlinedButton(
+        if (hasVideo) {
+            Button(
                 onClick = onPreview,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text(text = "Просмотр", fontSize = scaleSp(13f))
             }
+        } else {
             Button(
-                onClick = onUploadNew,
-                modifier = Modifier.weight(1f),
+                onClick = onUploadVideo,
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text(text = "Изменить видео", fontSize = scaleSp(13f))
+                Text(text = "Загрузить видео", fontSize = scaleSp(13f))
             }
         }
     }
@@ -419,8 +496,8 @@ private fun EditProfileSheet(
     scaleSp: (Float) -> TextUnit,
 ) {
     var name by remember(initial.name) { mutableStateOf(initial.name) }
-    var age by remember(initial.age) { mutableStateOf(initial.age) }
     var city by remember(initial.city) { mutableStateOf(initial.city) }
+    var description by remember(initial.description) { mutableStateOf(initial.description) }
     var avatarSeed by remember(initial.avatarSeed) { mutableIntStateOf(initial.avatarSeed) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -480,14 +557,19 @@ private fun EditProfileSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(scaleDp(10f)))
-            OutlinedTextField(
-                value = age,
-                onValueChange = { age = it.filter { ch -> ch.isDigit() }.take(2) },
-                label = { Text("Возраст", fontSize = scaleSp(12f)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (initial.age.isNotBlank()) {
+                Spacer(Modifier.height(scaleDp(6f)))
+                val ageInt = initial.age.toIntOrNull()
+                Text(
+                    text = if (ageInt != null) {
+                        "Возраст: ${formatAgeLabel(ageInt)} (из даты рождения)"
+                    } else {
+                        "Возраст: ${initial.age} (из даты рождения)"
+                    },
+                    fontSize = scaleSp(12f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                )
+            }
             Spacer(Modifier.height(scaleDp(10f)))
             OutlinedTextField(
                 value = city,
@@ -495,6 +577,27 @@ private fun EditProfileSheet(
                 label = { Text("Город", fontSize = scaleSp(12f)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(scaleDp(10f)))
+            OutlinedTextField(
+                value = description,
+                onValueChange = { if (it.length <= DESCRIPTION_MAX_LENGTH) description = it },
+                label = { Text("О себе", fontSize = scaleSp(12f)) },
+                placeholder = { Text("Расскажите о себе", fontSize = scaleSp(12f)) },
+                supportingText = {
+                    Text(
+                        text = "${description.length}/$DESCRIPTION_MAX_LENGTH",
+                        fontSize = scaleSp(11f),
+                        color = if (description.length >= DESCRIPTION_MAX_LENGTH) {
+                            Color(0xFFEF4444)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        }
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                maxLines = 6
             )
 
             Spacer(Modifier.height(scaleDp(14f)))
@@ -514,8 +617,8 @@ private fun EditProfileSheet(
                         onSave(
                             initial.copy(
                                 name = name.trim().ifBlank { initial.name },
-                                age = age.trim().ifBlank { initial.age },
                                 city = city.trim().ifBlank { initial.city },
+                                description = description.trim().take(DESCRIPTION_MAX_LENGTH),
                                 avatarSeed = avatarSeed
                             )
                         )
@@ -582,9 +685,9 @@ private fun SettingsSheet(
                     Spacer(Modifier.height(scaleDp(4f)))
                     Text(
                         text = if (isProfileActive) {
-                            "Другие видят твою анкету. Лента и сообщения доступны."
+                            "Другие видят твою анкету в ленте. Сообщения доступны."
                         } else {
-                            "Твою анкету не показываем другим. Лента и сообщения заблокированы."
+                            "Твою анкету не показываем в ленте. Сообщения по-прежнему доступны."
                         },
                         fontSize = scaleSp(12f),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
@@ -705,28 +808,25 @@ private fun ChangePasswordSheet(
             )
             Spacer(Modifier.height(scaleDp(12f)))
 
-            OutlinedTextField(
+            PasswordTextField(
                 value = oldPass,
                 onValueChange = { oldPass = it },
-                label = { Text("Текущий пароль", fontSize = scaleSp(12f)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                label = "Текущий пароль",
+                scaleSp = scaleSp,
             )
             Spacer(Modifier.height(scaleDp(10f)))
-            OutlinedTextField(
+            PasswordTextField(
                 value = newPass,
                 onValueChange = { newPass = it },
-                label = { Text("Новый пароль", fontSize = scaleSp(12f)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                label = "Новый пароль",
+                scaleSp = scaleSp,
             )
             Spacer(Modifier.height(scaleDp(10f)))
-            OutlinedTextField(
+            PasswordTextField(
                 value = confirm,
                 onValueChange = { confirm = it },
-                label = { Text("Повторите новый пароль", fontSize = scaleSp(12f)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                label = "Повторите новый пароль",
+                scaleSp = scaleSp,
             )
 
             Spacer(Modifier.height(scaleDp(14f)))
