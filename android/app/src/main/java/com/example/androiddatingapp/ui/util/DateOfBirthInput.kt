@@ -1,5 +1,7 @@
 package com.example.androiddatingapp.ui.util
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import java.time.LocalDate
 import java.time.Period
 import java.time.format.DateTimeFormatter
@@ -7,6 +9,7 @@ import java.time.format.DateTimeParseException
 
 object DateOfBirthInput {
     const val PATTERN = "dd-MM-yyyy"
+    @RequiresApi(Build.VERSION_CODES.O)
     private val formatter = DateTimeFormatter.ofPattern(PATTERN)
 
     /** ДД-ММ-ГГГГ из строки только из цифр (до 8). */
@@ -44,6 +47,7 @@ object DateOfBirthInput {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun parseAgeYears(formatted: String): Int? {
         if (formatted.length != PATTERN.length) return null
         return try {
