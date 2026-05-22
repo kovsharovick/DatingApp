@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import com.example.androiddatingapp.ui.theme.AppButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,7 +53,7 @@ fun OnboardingScreen(
         Spacer(Modifier.height(scaleDp(8f)))
         Text(
             text = "Расскажите о себе и добавьте видео для анкеты. " +
-                "Без видео лента и сообщения будут недоступны.",
+                "Без видео лента будет недоступна, чаты останутся открытыми.",
             fontSize = scaleSp(14f),
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
         )
@@ -95,7 +96,8 @@ fun OnboardingScreen(
         OutlinedButton(
             onClick = { videoUploaded = true },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !videoUploaded
+            enabled = !videoUploaded,
+            colors = AppButtonDefaults.outlinedBlue(),
         ) {
             Text(
                 text = if (videoUploaded) "Видео загружено" else "Загрузить видео",
@@ -106,14 +108,16 @@ fun OnboardingScreen(
         Spacer(Modifier.height(scaleDp(24f)))
         Button(
             onClick = { onComplete(description.trim(), videoUploaded) },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = AppButtonDefaults.blue(),
         ) {
             Text("Готово", fontSize = scaleSp(14f))
         }
         Spacer(Modifier.height(scaleDp(10f)))
         OutlinedButton(
             onClick = onSkip,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = AppButtonDefaults.outlinedRed(),
         ) {
             Text("Пропустить", fontSize = scaleSp(14f))
         }

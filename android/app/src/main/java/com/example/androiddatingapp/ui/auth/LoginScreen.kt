@@ -11,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import com.example.androiddatingapp.ui.theme.AppButtonDefaults
+import com.example.androiddatingapp.ui.theme.AppRedLight
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import com.example.androiddatingapp.ui.components.PasswordTextField
@@ -20,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -79,7 +80,7 @@ fun LoginScreen(
             Text(
                 text = displayError,
                 fontSize = scaleSp(13f),
-                color = Color(0xFFEF4444)
+                color = AppRedLight
             )
         }
 
@@ -93,14 +94,16 @@ fun LoginScreen(
                     onLogin(email.trim(), password)
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = AppButtonDefaults.blue(),
         ) {
             Text("Войти", fontSize = scaleSp(14f))
         }
         Spacer(Modifier.height(scaleDp(10f)))
         OutlinedButton(
             onClick = onGoToRegister,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = AppButtonDefaults.outlinedMuted(),
         ) {
             Text("Создать аккаунт", fontSize = scaleSp(14f))
         }

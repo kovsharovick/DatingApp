@@ -57,4 +57,19 @@ object DateOfBirthInput {
             null
         }
     }
+
+    /** Дата рождения для заданного возраста (день/месяц — «сегодня» минус N лет). */
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun formatForAgeYears(ageYears: Int): String? {
+        if (ageYears !in 18..99) return null
+        return formatter.format(LocalDate.now().minusYears(ageYears.toLong()))
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun validateDateOfBirth(formatted: String): String? {
+        if (formatted.length != PATTERN.length) return "Введите дату в формате ДД-ММ-ГГГГ"
+        val age = parseAgeYears(formatted) ?: return "Некорректная дата"
+        if (age !in 18..99) return "Возраст от 18 до 99 лет"
+        return null
+    }
 }

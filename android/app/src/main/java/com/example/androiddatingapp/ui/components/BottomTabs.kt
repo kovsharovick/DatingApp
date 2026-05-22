@@ -8,13 +8,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.TextUnit
 fun BottomTabs(
     selectedTab: Int,
     onSelect: (Int) -> Unit,
+    inboxHasUnread: Boolean,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -48,8 +53,9 @@ fun BottomTabs(
             modifier = Modifier.weight(1f)
         )
         TabButton(
-            title = "Сообщения",
+            title = "Входящие",
             selected = selectedTab == 1,
+            showBadge = inboxHasUnread,
             onClick = { onSelect(1) },
             scaleDp = scaleDp,
             scaleSp = scaleSp,
@@ -70,6 +76,7 @@ fun BottomTabs(
 private fun TabButton(
     title: String,
     selected: Boolean,
+    showBadge: Boolean = false,
     onClick: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
@@ -100,6 +107,16 @@ private fun TabButton(
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Clip
+            )
+        }
+        if (showBadge) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = scaleDp(-4f), y = scaleDp(2f))
+                    .size(scaleDp(8f))
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondary)
             )
         }
     }

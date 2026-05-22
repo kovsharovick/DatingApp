@@ -22,6 +22,7 @@ import com.example.androiddatingapp.ui.auth.RegisterScreen
 import com.example.androiddatingapp.ui.components.BottomTabs
 import com.example.androiddatingapp.ui.home.HomeScreen
 import com.example.androiddatingapp.ui.messages.MessagesScreen
+import com.example.androiddatingapp.ui.messages.rememberInboxHasUnread
 import com.example.androiddatingapp.ui.model.ScreenInfo
 import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.profile.ProfileScreen
@@ -43,10 +44,12 @@ fun AppRoot(
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var openProfileSettings by remember { mutableStateOf(false) }
+    var openProfileSubscription by remember { mutableStateOf(false) }
 
-    fun openProfileTab(openSettings: Boolean = false) {
+    fun openProfileTab(openSettings: Boolean = false, openSubscription: Boolean = false) {
         selectedTab = 2
         if (openSettings) openProfileSettings = true
+        if (openSubscription) openProfileSubscription = true
     }
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -89,7 +92,6 @@ fun AppRoot(
                                 dateOfBirth = dateOfBirth,
                                 gender = gender,
                                 city = city,
-                                avatarSeed = name.hashCode().and(0x7FFFFFFF),
                             )
                             accounts[key] = account
                             session = account
@@ -132,11 +134,20 @@ fun AppRoot(
 
             else -> {
                 val user = session!!
+                val inboxHasUnread = rememberInboxHasUnread()
 
                 when (selectedTab) {
                     0 -> HomeScreen(
                         hasVideo = user.hasVideo,
                         isProfileActive = user.isProfileActive,
+                        canSwipe = user.canSwipe(),
+                        remainingSwipes = user.remainingSwipes(),
+                        onSwipeConsumed = {
+                            val updated = user.withSwipeConsumed()
+                            session = updated
+                            accounts[updated.email] = updated
+                        },
+                        onOpenSubscription = { openProfileTab(openSubscription = true) },
                         onOpenProfile = { openProfileTab() },
                         onOpenSettings = { openProfileTab(openSettings = true) },
                         scaleDp = scale.dp,
@@ -144,8 +155,6 @@ fun AppRoot(
                         modifier = Modifier.weight(1f)
                     )
                     1 -> MessagesScreen(
-                        hasVideo = user.hasVideo,
-                        onOpenProfile = { openProfileTab() },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
                         modifier = Modifier.weight(1f)
@@ -158,12 +167,15 @@ fun AppRoot(
                         },
                         openSettings = openProfileSettings,
                         onOpenSettingsConsumed = { openProfileSettings = false },
+                        openSubscription = openProfileSubscription,
+                        onOpenSubscriptionConsumed = { openProfileSubscription = false },
                         onLogout = {
                             session = null
                             authMode = AuthMode.Login
                             authError = null
                             selectedTab = 0
                             openProfileSettings = false
+                            openProfileSubscription = false
                         },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
@@ -176,6 +188,7 @@ fun AppRoot(
                 BottomTabs(
                     selectedTab = selectedTab,
                     onSelect = { selectedTab = it },
+                    inboxHasUnread = inboxHasUnread && selectedTab != 1,
                     scaleDp = scale.dp,
                     scaleSp = scale.sp,
                     modifier = Modifier

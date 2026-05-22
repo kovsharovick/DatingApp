@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,19 +44,29 @@ import androidx.compose.ui.unit.TextUnit
 import com.example.androiddatingapp.ui.components.ExpandableDescription
 import com.example.androiddatingapp.ui.components.FeatureBlockOverlay
 import com.example.androiddatingapp.ui.model.ProfileUi
+import com.example.androiddatingapp.ui.theme.AppBlue
+import com.example.androiddatingapp.ui.theme.AppBlueLight
+import com.example.androiddatingapp.ui.theme.AppButtonDefaults
+import com.example.androiddatingapp.ui.theme.AppRed
+import com.example.androiddatingapp.ui.theme.AppRedLight
+import com.example.androiddatingapp.ui.theme.DarkCard
 import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
     hasVideo: Boolean,
     isProfileActive: Boolean,
+    canSwipe: Boolean,
+    remainingSwipes: Int,
+    onSwipeConsumed: () -> Unit,
+    onOpenSubscription: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
 ) {
-    val feedEnabled = hasVideo && isProfileActive
+    val feedEnabled = hasVideo && isProfileActive && canSwipe
     val profiles = remember {
         listOf(
             ProfileUi(
@@ -104,14 +113,29 @@ fun HomeScreen(
             scaleDp = scaleDp,
             scaleSp = scaleSp,
             modifier = Modifier.fillMaxSize(),
-            onDislike = { currentProfileIndex = (currentProfileIndex + 1) % profiles.size },
-            onLike = { currentProfileIndex = (currentProfileIndex + 1) % profiles.size }
+            onDislike = {
+                onSwipeConsumed()
+                currentProfileIndex = (currentProfileIndex + 1) % profiles.size
+            },
+            onLike = {
+                onSwipeConsumed()
+                currentProfileIndex = (currentProfileIndex + 1) % profiles.size
+            },
         )
 
         when {
+            hasVideo && isProfileActive && !canSwipe -> FeatureBlockOverlay(
+                title = "Свайпы закончились",
+                message = "Бесплатный лимит на сегодня исчерпан. Купите пакет +10, +20 или +50 свайпов в профиле.",
+                actionText = "Купить свайпы",
+                onAction = onOpenSubscription,
+                scaleDp = scaleDp,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxSize(),
+            )
             !hasVideo -> FeatureBlockOverlay(
                 title = "Нужно видео анкеты",
-                message = "Загрузите видео в профиле, чтобы листать ленту и переписываться.",
+                message = "Загрузите видео в профиле, чтобы листать ленту.",
                 actionText = "Перейти в профиль",
                 onAction = onOpenProfile,
                 scaleDp = scaleDp,
@@ -123,6 +147,20 @@ fun HomeScreen(
                 scaleSp = scaleSp,
                 onOpenSettings = onOpenSettings,
                 modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        if (hasVideo && isProfileActive && canSwipe) {
+            Text(
+                text = "Свайпов: $remainingSwipes",
+                fontSize = scaleSp(11f),
+                color = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(scaleDp(8f))
+                    .clip(RoundedCornerShape(scaleDp(10f)))
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .padding(horizontal = scaleDp(8f), vertical = scaleDp(4f)),
             )
         }
     }
@@ -147,7 +185,7 @@ private fun SwipeableVideoCard(
     BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(scaleDp(18f)))
-            .background(Color(0xFF101827))
+            .background(DarkCard)
     ) {
         val cardWidthPx = with(density) { maxWidth.toPx() }
         val actionThresholdPx = cardWidthPx * 0.28f
@@ -227,7 +265,7 @@ private fun SwipeableVideoCard(
         }
 
         if (enabled && showAction) {
-            val actionColor = if (isLike) Color(0xFF2563EB) else Color(0xFFEF4444)
+            val actionColor = if (isLike) AppBlue else AppRed
             val alpha = (0.20f + 0.80f * progress).coerceIn(0f, 1.0f)
             val edgeWidth = scaleDp(84f)
 
@@ -283,7 +321,7 @@ private fun PausedOverlay(
             modifier = Modifier
                 .padding(scaleDp(16f))
                 .clip(RoundedCornerShape(scaleDp(18f)))
-                .background(Color(0xFF101827))
+                .background(DarkCard)
                 .padding(scaleDp(16f)),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -302,7 +340,7 @@ private fun PausedOverlay(
             Spacer(Modifier.height(scaleDp(12f)))
             Button(
                 onClick = onOpenSettings,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                colors = AppButtonDefaults.blue(),
                 contentPadding = PaddingValues(horizontal = scaleDp(14f), vertical = scaleDp(10f))
             ) {
                 Text(text = "Перейти в настройки", fontSize = scaleSp(13f), color = Color.White)
@@ -343,7 +381,7 @@ private fun ProfileInfoStrip(
                 text = profile.description,
                 fontSize = scaleSp(13f),
                 textColor = Color.White.copy(alpha = 0.9f),
-                linkColor = Color(0xFF93C5FD),
+                linkColor = AppBlueLight,
                 collapsedMaxLines = 1,
             )
         }
