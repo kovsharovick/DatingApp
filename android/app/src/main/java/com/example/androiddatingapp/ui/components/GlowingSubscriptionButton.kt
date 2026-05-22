@@ -34,7 +34,7 @@ import com.example.androiddatingapp.ui.theme.AppRedLight
 
 @Composable
 fun GlowingSubscriptionButton(
-    remainingSwipes: Int,
+    remainingLikes: Int,
     onClick: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
@@ -105,17 +105,17 @@ fun GlowingSubscriptionButton(
     ) {
         Column {
             Text(
-                text = "🔥 Подписка на свайпы",
+                text = "🔥 Подписка на лайки",
                 fontSize = scaleSp(16f),
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
             )
             Spacer(Modifier.height(scaleDp(4f)))
             Text(
-                text = if (remainingSwipes > 0) {
-                    "Осталось $remainingSwipes свайпов · купить ещё"
+                text = if (remainingLikes > 0) {
+                    "Осталось $remainingLikes лайков · купить ещё"
                 } else {
-                    "Свайпы закончились · купить 10, 20 или 50"
+                    "Лайки закончились · купить 10, 20 или 50"
                 },
                 fontSize = scaleSp(12f),
                 color = Color.White.copy(alpha = 0.9f),

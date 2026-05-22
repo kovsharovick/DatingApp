@@ -56,9 +56,9 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     hasVideo: Boolean,
     isProfileActive: Boolean,
-    canSwipe: Boolean,
-    remainingSwipes: Int,
-    onSwipeConsumed: () -> Unit,
+    canLike: Boolean,
+    remainingLikes: Int,
+    onLikeConsumed: () -> Unit,
     onOpenSubscription: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -66,7 +66,7 @@ fun HomeScreen(
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
 ) {
-    val feedEnabled = hasVideo && isProfileActive && canSwipe
+    val feedEnabled = hasVideo && isProfileActive
     val profiles = remember {
         listOf(
             ProfileUi(
@@ -110,29 +110,21 @@ fun HomeScreen(
         SwipeableVideoCard(
             profile = currentProfile,
             enabled = feedEnabled,
+            canLike = canLike,
             scaleDp = scaleDp,
             scaleSp = scaleSp,
             modifier = Modifier.fillMaxSize(),
             onDislike = {
-                onSwipeConsumed()
                 currentProfileIndex = (currentProfileIndex + 1) % profiles.size
             },
             onLike = {
-                onSwipeConsumed()
+                onLikeConsumed()
                 currentProfileIndex = (currentProfileIndex + 1) % profiles.size
             },
+            onLikeLimitReached = onOpenSubscription,
         )
 
         when {
-            hasVideo && isProfileActive && !canSwipe -> FeatureBlockOverlay(
-                title = "Свайпы закончились",
-                message = "Бесплатный лимит на сегодня исчерпан. Купите пакет +10, +20 или +50 свайпов в профиле.",
-                actionText = "Купить свайпы",
-                onAction = onOpenSubscription,
-                scaleDp = scaleDp,
-                scaleSp = scaleSp,
-                modifier = Modifier.fillMaxSize(),
-            )
             !hasVideo -> FeatureBlockOverlay(
                 title = "Нужно видео анкеты",
                 message = "Загрузите видео в профиле, чтобы листать ленту.",
@@ -150,9 +142,9 @@ fun HomeScreen(
             )
         }
 
-        if (hasVideo && isProfileActive && canSwipe) {
+        if (hasVideo && isProfileActive) {
             Text(
-                text = "Свайпов: $remainingSwipes",
+                text = if (canLike) "Лайков: $remainingLikes" else "Лайки закончились",
                 fontSize = scaleSp(11f),
                 color = Color.White.copy(alpha = 0.85f),
                 modifier = Modifier
@@ -170,10 +162,12 @@ fun HomeScreen(
 private fun SwipeableVideoCard(
     profile: ProfileUi,
     enabled: Boolean,
+    canLike: Boolean,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     onDislike: () -> Unit,
     onLike: () -> Unit,
+    onLikeLimitReached: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
@@ -196,7 +190,7 @@ private fun SwipeableVideoCard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(isAnimatingOut, enabled) {
+                .pointerInput(isAnimatingOut, enabled, canLike) {
                     if (!enabled) return@pointerInput
                     detectDragGestures(
                         onDragCancel = {
@@ -221,6 +215,14 @@ private fun SwipeableVideoCard(
                                         animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
                                     )
                                 }
+                            } else if (action == "LIKE" && !canLike) {
+                                scope.launch {
+                                    offsetXPx.animateTo(
+                                        targetValue = 0f,
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                    )
+                                }
+                                onLikeLimitReached()
                             } else {
                                 isAnimatingOut = true
                                 val target = if (action == "LIKE") cardWidthPx * 1.2f else -cardWidthPx * 1.2f

@@ -1,21 +1,28 @@
 package com.example.androiddatingapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.example.androiddatingapp.data.AuthRepository
+import com.example.androiddatingapp.data.SessionStore
 import com.example.androiddatingapp.ui.auth.LoginScreen
 import com.example.androiddatingapp.ui.auth.OnboardingScreen
 import com.example.androiddatingapp.ui.auth.RegisterScreen
@@ -27,29 +34,57 @@ import com.example.androiddatingapp.ui.model.ScreenInfo
 import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.profile.ProfileScreen
 import com.example.androiddatingapp.ui.util.rememberScreenScale
+import kotlinx.coroutines.launch
 
 private enum class AuthMode { Login, Register }
 
 @Composable
 fun AppRoot(
     screen: ScreenInfo,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scale = rememberScreenScale(screen)
-    val accounts = remember { mutableStateMapOf<String, UserAccount>() }
+    val scope = rememberCoroutineScope()
+    val authRepository = remember {
+        AuthRepository(sessionStore = SessionStore(context.applicationContext))
+    }
 
     var session by remember { mutableStateOf<UserAccount?>(null) }
     var authMode by remember { mutableStateOf(AuthMode.Login) }
     var authError by remember { mutableStateOf<String?>(null) }
+    var authLoading by remember { mutableStateOf(false) }
+    var restoringSession by remember { mutableStateOf(true) }
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var openProfileSettings by remember { mutableStateOf(false) }
     var openProfileSubscription by remember { mutableStateOf(false) }
 
+    val searchCities: suspend (String) -> Result<List<String>> = remember(authRepository) {
+        { prefix -> authRepository.searchCities(prefix) }
+    }
+
     fun openProfileTab(openSettings: Boolean = false, openSubscription: Boolean = false) {
         selectedTab = 2
         if (openSettings) openProfileSettings = true
         if (openSubscription) openProfileSubscription = true
+    }
+
+    LaunchedEffect(authRepository) {
+        restoringSession = true
+        authRepository.restoreSession()
+            .onSuccess { session = it }
+        restoringSession = false
+    }
+
+    if (restoringSession) {
+        Box(
+            modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+        return
     }
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -59,14 +94,15 @@ fun AppRoot(
                     AuthMode.Login -> LoginScreen(
                         onLogin = { email, password ->
                             authError = null
-                            val account = accounts[email.trim().lowercase()]
-                            when {
-                                account == null -> authError = "Аккаунт не найден"
-                                account.password != password -> authError = "Неверный пароль"
-                                else -> {
-                                    session = account
-                                    selectedTab = 0
-                                }
+                            authLoading = true
+                            scope.launch {
+                                authRepository.login(email, password)
+                                    .onSuccess { account ->
+                                        session = account.copy(onboardingCompleted = account.hasVideo)
+                                        selectedTab = 0
+                                    }
+                                    .onFailure { authError = it.message }
+                                authLoading = false
                             }
                         },
                         onGoToRegister = {
@@ -74,39 +110,36 @@ fun AppRoot(
                             authError = null
                         },
                         errorMessage = authError,
+                        isLoading = authLoading,
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
                     AuthMode.Register -> RegisterScreen(
                         onRegister = { email, password, name, dateOfBirth, gender, city ->
                             authError = null
-                            val key = email.trim().lowercase()
-                            if (accounts.containsKey(key)) {
-                                authError = "Email уже зарегистрирован"
-                            } else {
-                            val account = UserAccount(
-                                email = key,
-                                password = password,
-                                name = name,
-                                dateOfBirth = dateOfBirth,
-                                gender = gender,
-                                city = city,
-                            )
-                            accounts[key] = account
-                            session = account
-                            selectedTab = 0
-                            authMode = AuthMode.Login
+                            authLoading = true
+                            scope.launch {
+                                authRepository.register(email, password, name, dateOfBirth, gender, city)
+                                    .onSuccess { account ->
+                                        session = account.copy(onboardingCompleted = account.hasVideo)
+                                        selectedTab = 0
+                                        authMode = AuthMode.Login
+                                    }
+                                    .onFailure { authError = it.message }
+                                authLoading = false
                             }
                         },
                         onBackToLogin = {
                             authMode = AuthMode.Login
                             authError = null
                         },
+                        onSearchCities = searchCities,
                         errorMessage = authError,
+                        isLoading = authLoading,
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
@@ -121,14 +154,14 @@ fun AppRoot(
                             hasVideo = videoUploaded,
                             videoTitle = if (videoUploaded) "video_profile_v1.mp4" else "",
                             onboardingCompleted = true,
-                        ).also { accounts[user.email] = it }
+                        )
                     },
                     onSkip = {
-                        session = user.copy(onboardingCompleted = true).also { accounts[user.email] = it }
+                        session = user.copy(onboardingCompleted = true)
                     },
                     scaleDp = scale.dp,
                     scaleSp = scale.sp,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
 
@@ -140,36 +173,31 @@ fun AppRoot(
                     0 -> HomeScreen(
                         hasVideo = user.hasVideo,
                         isProfileActive = user.isProfileActive,
-                        canSwipe = user.canSwipe(),
-                        remainingSwipes = user.remainingSwipes(),
-                        onSwipeConsumed = {
-                            val updated = user.withSwipeConsumed()
-                            session = updated
-                            accounts[updated.email] = updated
-                        },
+                        canLike = user.canLike(),
+                        remainingLikes = user.remainingLikes(),
+                        onLikeConsumed = { session = user.withLikeConsumed() },
                         onOpenSubscription = { openProfileTab(openSubscription = true) },
                         onOpenProfile = { openProfileTab() },
                         onOpenSettings = { openProfileTab(openSettings = true) },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     1 -> MessagesScreen(
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     else -> ProfileScreen(
                         account = user,
-                        onAccountUpdate = { updated ->
-                            session = updated
-                            accounts[updated.email] = updated
-                        },
+                        onAccountUpdate = { session = it },
+                        onSearchCities = searchCities,
                         openSettings = openProfileSettings,
                         onOpenSettingsConsumed = { openProfileSettings = false },
                         openSubscription = openProfileSubscription,
                         onOpenSubscriptionConsumed = { openProfileSubscription = false },
                         onLogout = {
+                            scope.launch { authRepository.logout() }
                             session = null
                             authMode = AuthMode.Login
                             authError = null
@@ -179,7 +207,7 @@ fun AppRoot(
                         },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                 }
 
@@ -193,7 +221,7 @@ fun AppRoot(
                     scaleSp = scale.sp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = scale.dp(12f), vertical = scale.dp(10f))
+                        .padding(horizontal = scale.dp(12f), vertical = scale.dp(10f)),
                 )
             }
         }

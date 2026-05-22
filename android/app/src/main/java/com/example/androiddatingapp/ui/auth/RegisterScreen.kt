@@ -18,6 +18,7 @@ import com.example.androiddatingapp.ui.theme.AppRedLight
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import com.example.androiddatingapp.ui.components.CityAutocompleteField
 import com.example.androiddatingapp.ui.components.DateOfBirthTextField
 import com.example.androiddatingapp.ui.components.PasswordTextField
 import androidx.compose.runtime.Composable
@@ -47,7 +48,9 @@ fun RegisterScreen(
         city: String,
     ) -> Unit,
     onBackToLogin: () -> Unit,
+    onSearchCities: suspend (String) -> Result<List<String>>,
     errorMessage: String?,
+    isLoading: Boolean = false,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier,
@@ -142,12 +145,18 @@ fun RegisterScreen(
                 }
             }
             Spacer(Modifier.height(scaleDp(12f)))
-            OutlinedTextField(
+            CityAutocompleteField(
                 value = city,
                 onValueChange = { city = it; localError = null },
-                label = { Text("Город", fontSize = scaleSp(12f)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                onSearch = onSearchCities,
+                scaleSp = scaleSp,
+                scaleDp = scaleDp,
+            )
+            Spacer(Modifier.height(scaleDp(4f)))
+            Text(
+                text = "Выберите город из выпадающего списка (например, Воронеж)",
+                fontSize = scaleSp(11f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
         }
 
@@ -166,6 +175,7 @@ fun RegisterScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = AppButtonDefaults.blue(),
+                enabled = !isLoading,
             ) {
                 Text("Далее", fontSize = scaleSp(14f))
             }
@@ -188,14 +198,16 @@ fun RegisterScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = AppButtonDefaults.blue(),
+                enabled = !isLoading,
             ) {
-                Text("Создать аккаунт", fontSize = scaleSp(14f))
+                Text(if (isLoading) "Создание…" else "Создать аккаунт", fontSize = scaleSp(14f))
             }
             Spacer(Modifier.height(scaleDp(10f)))
             OutlinedButton(
                 onClick = { step = 0; localError = null },
                 modifier = Modifier.fillMaxWidth(),
                 colors = AppButtonDefaults.outlinedBlue(),
+                enabled = !isLoading,
             ) {
                 Text("Назад", fontSize = scaleSp(14f))
             }
@@ -205,6 +217,7 @@ fun RegisterScreen(
             onClick = onBackToLogin,
             modifier = Modifier.fillMaxWidth(),
             colors = AppButtonDefaults.outlinedMuted(),
+            enabled = !isLoading,
         ) {
             Text("Уже есть аккаунт", fontSize = scaleSp(14f))
         }

@@ -1,6 +1,7 @@
 package com.example.androiddatingapp.ui.auth
 
 import com.example.androiddatingapp.ui.model.Gender
+import com.example.androiddatingapp.ui.util.DateOfBirthInput
 
 object AuthValidation {
     private val EMAIL_REGEX = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
@@ -26,7 +27,7 @@ object AuthValidation {
         city: String,
     ): String? {
         if (name.isBlank()) return "Введите имя"
-        if (dateOfBirth.isBlank()) return "Введите дату рождения"
+        DateOfBirthInput.validateDateOfBirth(dateOfBirth.trim())?.let { return it }
         if (gender == null) return "Выберите пол"
         if (city.isBlank()) return "Введите город"
         return null

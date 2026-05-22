@@ -31,6 +31,7 @@ fun LoginScreen(
     onLogin: (email: String, password: String) -> Unit,
     onGoToRegister: () -> Unit,
     errorMessage: String?,
+    isLoading: Boolean = false,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier,
@@ -96,14 +97,16 @@ fun LoginScreen(
             },
             modifier = Modifier.fillMaxWidth(),
             colors = AppButtonDefaults.blue(),
+            enabled = !isLoading,
         ) {
-            Text("Войти", fontSize = scaleSp(14f))
+            Text(if (isLoading) "Вход…" else "Войти", fontSize = scaleSp(14f))
         }
         Spacer(Modifier.height(scaleDp(10f)))
         OutlinedButton(
             onClick = onGoToRegister,
             modifier = Modifier.fillMaxWidth(),
             colors = AppButtonDefaults.outlinedMuted(),
+            enabled = !isLoading,
         ) {
             Text("Создать аккаунт", fontSize = scaleSp(14f))
         }

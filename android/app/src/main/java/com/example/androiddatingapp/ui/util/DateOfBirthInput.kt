@@ -1,16 +1,20 @@
 package com.example.androiddatingapp.ui.util
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import java.time.LocalDate
 import java.time.Period
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 object DateOfBirthInput {
-    const val PATTERN = "dd-MM-yyyy"
-    @RequiresApi(Build.VERSION_CODES.O)
-    private val formatter = DateTimeFormatter.ofPattern(PATTERN)
+    /** Формат ввода в приложении. */
+    const val UI_PATTERN = "dd-MM-yyyy"
+    const val PATTERN = UI_PATTERN
+
+    /** Формат для API и БД (ISO). */
+    const val API_PATTERN = "yyyy-MM-dd"
+
+    private val uiFormatter = DateTimeFormatter.ofPattern(UI_PATTERN)
+    private val apiFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
     /** ДД-ММ-ГГГГ из строки только из цифр (до 8). */
     fun formatFromDigits(digits: String): String {
@@ -47,11 +51,10 @@ object DateOfBirthInput {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     fun parseAgeYears(formatted: String): Int? {
-        if (formatted.length != PATTERN.length) return null
+        if (formatted.length != UI_PATTERN.length) return null
         return try {
-            val dob = LocalDate.parse(formatted, formatter)
+            val dob = LocalDate.parse(formatted, uiFormatter)
             Period.between(dob, LocalDate.now()).years
         } catch (_: DateTimeParseException) {
             null
@@ -59,17 +62,40 @@ object DateOfBirthInput {
     }
 
     /** Дата рождения для заданного возраста (день/месяц — «сегодня» минус N лет). */
-    @RequiresApi(Build.VERSION_CODES.O)
     fun formatForAgeYears(ageYears: Int): String? {
         if (ageYears !in 18..99) return null
-        return formatter.format(LocalDate.now().minusYears(ageYears.toLong()))
+        return uiFormatter.format(LocalDate.now().minusYears(ageYears.toLong()))
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     fun validateDateOfBirth(formatted: String): String? {
-        if (formatted.length != PATTERN.length) return "Введите дату в формате ДД-ММ-ГГГГ"
+        if (formatted.length != UI_PATTERN.length) return "Введите дату в формате ДД-ММ-ГГГГ"
         val age = parseAgeYears(formatted) ?: return "Некорректная дата"
         if (age !in 18..99) return "Возраст от 18 до 99 лет"
         return null
+    }
+
+    /**
+     * Конвертация для отправки на бэкенд: [UI_PATTERN] → [API_PATTERN].
+     * Проверяет, что дата существует (например, 31-02-2005 будет отклонена).
+     */
+    fun toApiIsoDate(uiFormatted: String): String? {
+        if (uiFormatted.length != UI_PATTERN.length) return null
+        return try {
+            val date = LocalDate.parse(uiFormatted, uiFormatter)
+            apiFormatter.format(date)
+        } catch (_: DateTimeParseException) {
+            null
+        }
+    }
+
+    /** Обратная конвертация, когда API вернёт ISO-дату (для отображения в поле). */
+    fun fromApiIsoDate(apiFormatted: String): String? {
+        if (apiFormatted.isBlank()) return null
+        return try {
+            val date = LocalDate.parse(apiFormatted, apiFormatter)
+            uiFormatter.format(date)
+        } catch (_: DateTimeParseException) {
+            null
+        }
     }
 }

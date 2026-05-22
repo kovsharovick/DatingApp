@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import com.example.androiddatingapp.ui.components.CityAutocompleteField
 import com.example.androiddatingapp.ui.components.DateOfBirthTextField
 import com.example.androiddatingapp.ui.components.ExpandableDescription
 import com.example.androiddatingapp.ui.components.GlowingSubscriptionButton
@@ -87,6 +88,7 @@ fun ProfileScreen(
     onOpenSettingsConsumed: () -> Unit,
     openSubscription: Boolean = false,
     onOpenSubscriptionConsumed: () -> Unit = {},
+    onSearchCities: suspend (String) -> Result<List<String>>,
     onLogout: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
@@ -126,7 +128,7 @@ fun ProfileScreen(
                 profile = profile,
                 cityAgeLine = profileCityAgeLine(account.city, account.ageYears()),
                 hasVideo = account.hasVideo,
-                remainingSwipes = account.remainingSwipes(),
+                remainingLikes = account.remainingLikes(),
                 onOpenSubscription = { subscriptionSheetOpen = true },
                 onOpenPreview = { showPreview = true },
                 onUploadVideo = { changeVideoSheetOpen = true },
@@ -142,6 +144,7 @@ fun ProfileScreen(
     if (editSheetOpen) {
         EditProfileSheet(
             initial = profile,
+            onSearchCities = onSearchCities,
             onDismiss = { editSheetOpen = false },
             onSave = { updated ->
                 onAccountUpdate(
@@ -208,10 +211,10 @@ fun ProfileScreen(
 
     if (subscriptionSheetOpen) {
         SwipeSubscriptionSheet(
-            remainingSwipes = account.remainingSwipes(),
+            remainingLikes = account.remainingLikes(),
             onDismiss = { subscriptionSheetOpen = false },
             onPurchase = { packSize ->
-                onAccountUpdate(account.withBonusSwipesPurchased(packSize))
+                onAccountUpdate(account.withBonusLikesPurchased(packSize))
                 subscriptionSheetOpen = false
             },
             scaleDp = scaleDp,
@@ -234,7 +237,7 @@ private fun ProfileMainScreen(
     profile: UserProfileUi,
     cityAgeLine: String,
     hasVideo: Boolean,
-    remainingSwipes: Int,
+    remainingLikes: Int,
     onOpenSubscription: () -> Unit,
     onOpenPreview: () -> Unit,
     onUploadVideo: () -> Unit,
@@ -315,7 +318,7 @@ private fun ProfileMainScreen(
         Spacer(Modifier.height(scaleDp(12f)))
 
         GlowingSubscriptionButton(
-            remainingSwipes = remainingSwipes,
+            remainingLikes = remainingLikes,
             onClick = onOpenSubscription,
             scaleDp = scaleDp,
             scaleSp = scaleSp,
@@ -536,6 +539,7 @@ private fun VideoCard(
 @Composable
 private fun EditProfileSheet(
     initial: UserProfileUi,
+    onSearchCities: suspend (String) -> Result<List<String>>,
     onDismiss: () -> Unit,
     onSave: (UserProfileUi) -> Unit,
     scaleDp: (Float) -> Dp,
@@ -594,12 +598,12 @@ private fun EditProfileSheet(
                 )
             }
             Spacer(Modifier.height(scaleDp(10f)))
-            OutlinedTextField(
+            CityAutocompleteField(
                 value = city,
                 onValueChange = { city = it },
-                label = { Text("Город", fontSize = scaleSp(12f)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                onSearch = onSearchCities,
+                scaleSp = scaleSp,
+                scaleDp = scaleDp,
             )
             Spacer(Modifier.height(scaleDp(10f)))
             OutlinedTextField(
@@ -828,7 +832,7 @@ private fun ChangeVideoSheet(
     }
 }
 
-private fun swipePackPrice(swipes: Int): String = when (swipes) {
+private fun likePackPrice(likes: Int): String = when (likes) {
     10 -> "149 ₽"
     20 -> "249 ₽"
     50 -> "499 ₽"
@@ -838,7 +842,7 @@ private fun swipePackPrice(swipes: Int): String = when (swipes) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeSubscriptionSheet(
-    remainingSwipes: Int,
+    remainingLikes: Int,
     onDismiss: () -> Unit,
     onPurchase: (Int) -> Unit,
     scaleDp: (Float) -> Dp,
@@ -857,29 +861,29 @@ private fun SwipeSubscriptionSheet(
                 .padding(horizontal = scaleDp(14f), vertical = scaleDp(10f)),
         ) {
             Text(
-                text = "Дополнительные свайпы",
+                text = "Дополнительные лайки",
                 fontSize = scaleSp(16f),
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(scaleDp(6f)))
             Text(
-                text = "Каждый день — ${UserAccount.DAILY_FREE_SWIPES} бесплатных свайпов. " +
-                    "Сейчас доступно: $remainingSwipes.",
+                text = "Каждый день — ${UserAccount.DAILY_FREE_LIKES} бесплатных лайков. " +
+                    "Дизлайки без ограничений. Сейчас доступно: $remainingLikes.",
                 fontSize = scaleSp(12f),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
             )
             Spacer(Modifier.height(scaleDp(14f)))
 
-            UserAccount.SWIPE_PACK_OPTIONS.forEach { pack ->
-                val price = swipePackPrice(pack)
+            UserAccount.LIKE_PACK_OPTIONS.forEach { pack ->
+                val price = likePackPrice(pack)
                 Button(
                     onClick = { onPurchase(pack) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = AppButtonDefaults.red(),
                 ) {
                     Text(
-                        text = "+$pack свайпов · $price",
+                        text = "+$pack лайков · $price",
                         fontSize = scaleSp(14f),
                     )
                 }
