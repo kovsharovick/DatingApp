@@ -25,8 +25,12 @@ public class AvatarService {
 
     @Transactional
     public String uploadAvatar(MultipartFile file, Long userId) {
-        if (!ALLOWED_TYPES.contains(file.getContentType())) {
-            throw new IllegalArgumentException("Only JPEG, PNG, WebP images are allowed");
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Avatar file is empty");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_TYPES.contains(contentType)) {
+            throw new IllegalArgumentException("Unsupported or missing file type. Allowed: JPEG, PNG, WebP.");
         }
         if (file.getSize() > MAX_SIZE) {
             throw new IllegalArgumentException("Avatar file size must not exceed 5 MB");
