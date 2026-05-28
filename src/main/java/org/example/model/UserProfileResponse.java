@@ -22,4 +22,6 @@ public class UserProfileResponse {
     private Integer maxAge;
     private Integer radiusKm;
     private List<Gender> preferredGenders;
+    private String avatarUrl;
+    private String thumbnailUrl;
 }

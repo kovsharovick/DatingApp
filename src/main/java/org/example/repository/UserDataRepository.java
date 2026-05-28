@@ -71,6 +71,10 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
                   )
                   AND u.id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = :currentUserId)
                   AND u.id NOT IN (SELECT blocker_id FROM user_blocks WHERE blocked_id = :currentUserId)
+                  AND u.id NOT IN (
+                      SELECT target_id FROM user_swipes
+                      WHERE swiper_id = :currentUserId
+                  )
                 ORDER BY 
                     earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) ASC,
                     ABS(DATE_PART('year', AGE(u.date_of_birth, :currentBirth))) ASC

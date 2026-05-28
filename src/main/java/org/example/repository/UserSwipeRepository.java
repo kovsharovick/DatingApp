@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 
 public interface UserSwipeRepository extends JpaRepository<UserSwipe, Long> {
 
@@ -27,4 +29,10 @@ public interface UserSwipeRepository extends JpaRepository<UserSwipe, Long> {
     @Transactional
     @Query("DELETE FROM UserSwipe s WHERE s.target.id = :targetId AND s.direction = :direction")
     void deleteByTargetIdAndDirection(@Param("targetId") Long targetId, @Param("direction") SwipeDirection direction);
+
+    @Query("SELECT DISTINCT sw.swiper.id FROM UserSwipe sw WHERE sw.target.id = :targetId AND sw.direction = :direction AND sw.swiper.id IN :candidateIds")
+    Set<Long> findDistinctSwiperIdByTargetIdAndDirectionAndSwiperIdIn(
+            @Param("targetId") Long targetId,
+            @Param("direction") SwipeDirection direction,
+            @Param("candidateIds") Collection<Long> candidateIds);
 }

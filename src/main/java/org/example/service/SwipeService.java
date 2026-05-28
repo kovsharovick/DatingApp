@@ -3,9 +3,8 @@ package org.example.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.entities.Match;
-import org.example.entities.UserData;
-import org.example.entities.UserSwipe;
 import org.example.model.SwipeDirection;
+import org.example.repository.AdvisoryLockRepository;
 import org.example.repository.MatchRepository;
 import org.example.repository.UserDataRepository;
 import org.example.repository.UserSwipeRepository;
@@ -22,46 +21,59 @@ public class SwipeService {
     private final UserSwipeRepository swipeRepository;
     private final UserDataRepository userDataRepository;
     private final MatchRepository matchRepository;
+    private final LikeLimitService likeLimitService;
+    private final FeedService feedService;
+    private final SwipeTransactionHelper swipeHelper;
+    private final AdvisoryLockRepository advisoryLock;
 
-    @Transactional
     public boolean swipe(Long currentUserId, Long targetUserId, SwipeDirection direction) {
         if (currentUserId.equals(targetUserId)) {
             throw new IllegalArgumentException("Cannot swipe yourself");
         }
 
-        if (swipeRepository.existsBySwiper_IdAndTarget_Id(currentUserId, targetUserId)) {
-            throw new IllegalStateException("Already swiped this user");
+        if (direction == SwipeDirection.LIKE
+                && likeLimitService.isLimitReached(currentUserId)) {
+            throw new IllegalStateException(
+                    "Daily like limit reached. Remaining: "
+                            + likeLimitService.remaining(currentUserId));
         }
 
-        UserSwipe swipe = UserSwipe.builder()
-                .swiper(userDataRepository.getReferenceById(currentUserId))
-                .target(userDataRepository.getReferenceById(targetUserId))
-                .direction(direction)
-                .swipedAt(LocalDateTime.now())
-                .build();
-        swipeRepository.save(swipe);
+        swipeHelper.insertSwipe(currentUserId, targetUserId, direction);
 
-        if (direction == SwipeDirection.DISLIKE) {
-            return false;
+        feedService.removeSwipedUserId(currentUserId, targetUserId);
+
+        if (direction == SwipeDirection.DISLIKE) return false;
+
+        likeLimitService.increment(currentUserId);
+
+        return checkAndCreateMatch(currentUserId, targetUserId);
+    }
+
+    @Transactional
+    protected boolean checkAndCreateMatch(Long currentUserId, Long targetUserId) {
+        Long u1 = Math.min(currentUserId, targetUserId);
+        Long u2 = Math.max(currentUserId, targetUserId);
+
+        long lockKey = u1 * 1_000_000_000L + u2;
+        advisoryLock.acquireTransactionLock(lockKey);
+
+        if (matchRepository.existsByUser1IdAndUser2Id(u1, u2)) {
+            return true;
         }
 
         boolean mutualLike = swipeRepository.existsBySwiper_IdAndTarget_IdAndDirection(
                 targetUserId, currentUserId, SwipeDirection.LIKE);
 
-        if (mutualLike) {
-            Long user1Id = currentUserId < targetUserId ? currentUserId : targetUserId;
-            Long user2Id = currentUserId < targetUserId ? targetUserId : currentUserId;
+        if (!mutualLike) return false;
 
-            Match match = Match.builder()
-                    .user1(userDataRepository.getReferenceById(user1Id))
-                    .user2(userDataRepository.getReferenceById(user2Id))
-                    .matchedAt(LocalDateTime.now())
-                    .build();
-            matchRepository.save(match);
-            log.info("New match created between {} and {}", user1Id, user2Id);
-            return true;
-        }
+        Match match = Match.builder()
+                .user1(userDataRepository.getReferenceById(u1))
+                .user2(userDataRepository.getReferenceById(u2))
+                .matchedAt(LocalDateTime.now())
+                .build();
+        matchRepository.save(match);
 
-        return false;
+        log.info("Match created between {} and {}", u1, u2);
+        return true;
     }
 }

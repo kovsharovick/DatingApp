@@ -81,6 +81,9 @@ public class UserData {
     @Column(name = "radius_km")
     private Integer radiusKm;
 
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
@@ -96,7 +99,6 @@ public class UserData {
         if (preferredGenderJson == null || preferredGenderJson.isBlank()) {
             return new ArrayList<>();
         }
-        // Простейшая реализация: разделение запятой, без пробелов
         return Arrays.stream(preferredGenderJson.split(","))
                 .map(Gender::valueOf)
                 .collect(Collectors.toList());

@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/datingApp
-    username: postgres
-    password: 1111
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/datingApp}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:1111}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -13,7 +13,7 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   data:
     redis:
-      host: localhost
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: 6379
 
 jwt:
@@ -21,7 +21,11 @@ jwt:
   expiration: 86400000
 
 minio:
-  endpoint: http://localhost:9000
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
   access-key: minioadmin
   secret-key: minioadmin
 
+app:
+  likes:
+    free-daily-limit: 5
+    premium-daily-limit: 100

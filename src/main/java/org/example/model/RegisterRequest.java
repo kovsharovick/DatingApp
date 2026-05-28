@@ -2,6 +2,7 @@ package org.example.model;
 
 import jakarta.validation.constraints.*;
 import lombok.*;
+import org.example.validation.MinAge;
 
 import java.util.List;
 
@@ -25,6 +26,7 @@ public class RegisterRequest {
     private String name;
 
     @NotNull
+    @MinAge(18)
     private String dateOfBirth;
 
     @NotNull

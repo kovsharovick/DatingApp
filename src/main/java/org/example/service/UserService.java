@@ -27,12 +27,18 @@ public class UserService {
     private final MinioService minioService;
     private final CityService cityService;
     private final JwtUtil jwtUtil;
+    private final SubscriptionService subscriptionService;
+    private final FeedService feedService;
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userDataRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already in use");
+        }
+        LocalDate dob = LocalDate.parse(request.getDateOfBirth());
+        if (Period.between(dob, LocalDate.now()).getYears() < 18) {
+            throw new RuntimeException("User must be at least 18 years old");
         }
         City city = cityService.findCityByName(request.getCity())
                 .orElseThrow(() -> new RuntimeException("City not found"));
@@ -41,7 +47,7 @@ public class UserService {
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .name(request.getName())
-                .dateOfBirth(LocalDate.parse(request.getDateOfBirth()))
+                .dateOfBirth(dob)
                 .city(city)
                 .gender(request.getGender())
                 .description(request.getDescription() != null ? request.getDescription() : "")
@@ -54,6 +60,7 @@ public class UserService {
                 .build();
 
         user = userDataRepository.save(user);
+        subscriptionService.createFreeSubscription(user.getId());
 
         String token = jwtUtil.generateToken(user.getId());
 
@@ -88,12 +95,33 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String videoUrl = null;
+        String thumbnailUrl = null;
+
+        if (user.getActiveVideo() != null) {
+            try {
+                videoUrl = minioService.getPresignedUrl(
+                        user.getActiveVideo().getVideoUrl());
+            } catch (Exception e) {
+                log.error("Failed to get video URL for user {}: {}", userId, e.getMessage());
+            }
+
+            try {
+                String thumb = user.getActiveVideo().getThumbnailUrl();
+                if (thumb != null && !thumb.isBlank()) {
+                    thumbnailUrl = minioService.getPresignedUrl(thumb);
+                }
+            } catch (Exception e) {
+                log.error("Failed to get thumbnail URL for user {}: {}", userId, e.getMessage());
+            }
+        }
+
+        String avatarUrl = null;
         try {
-            if (user.getActiveVideo() != null) {
-                videoUrl = minioService.getPresignedUrl(user.getActiveVideo().getVideoUrl());
+            if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+                avatarUrl = minioService.getPresignedUrl(user.getAvatarUrl());
             }
         } catch (Exception e) {
-            log.error("Failed to generate presigned URL for user {}: {}", userId, e.getMessage(), e);
+            log.error("Failed to get avatar URL for user {}: {}", userId, e.getMessage());
         }
 
         return UserProfileResponse.builder()
@@ -104,6 +132,8 @@ public class UserService {
                 .region(user.getCity().getRegion())
                 .description(user.getDescription())
                 .videoUrl(videoUrl)
+                .thumbnailUrl(thumbnailUrl)
+                .avatarUrl(avatarUrl)
                 .hidden(user.isHidden())
                 .minAge(user.getMinAge())
                 .maxAge(user.getMaxAge())
@@ -151,6 +181,17 @@ public class UserService {
         }
 
         userDataRepository.save(user);
+
+        boolean feedAffected = request.getMinAge() != null
+                || request.getMaxAge() != null
+                || request.getRadiusKm() != null
+                || request.getPreferredGenders() != null
+                || (request.getCity() != null && !request.getCity().isEmpty());
+
+        if (feedAffected) {
+            feedService.invalidateFeedCache(userId);
+            log.debug("Feed cache invalidated for user {} after profile update", userId);
+        }
 
         return getProfile(userId);
     }

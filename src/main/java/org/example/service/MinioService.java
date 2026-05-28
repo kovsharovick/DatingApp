@@ -78,4 +78,17 @@ public class MinioService {
             throw new RuntimeException("MinIO delete failed", e);
         }
     }
+
+    public InputStream downloadFile(String objectName) {
+        try {
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO download failed", e);
+        }
+    }
 }
