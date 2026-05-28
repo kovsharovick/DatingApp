@@ -6,6 +6,7 @@ import org.example.entities.UserData;
 import org.example.entities.UserVideo;
 import org.example.repository.UserDataRepository;
 import org.example.repository.UserVideoRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -27,8 +29,22 @@ public class VideoService {
     private final ThumbnailService thumbnailService;
     private final VideoMetadataService videoMetadataService;
 
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
+            "video/mp4",
+            "video/quicktime",
+            "video/x-msvideo"
+    );
+
+    @Value("${app.video.max-size-mb:250}")
+    private long maxSizeMb;
+
+    @Value("${app.video.max-duration-sec:120}")
+    private int maxDurationSec;
+
     @Transactional
     public Long uploadVideo(MultipartFile file, Long userId) {
+        validateFile(file);
+
         UserData user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -38,11 +54,15 @@ public class VideoService {
             file.transferTo(tempVideo.toFile());
 
             int realDuration = videoMetadataService.getDurationSec(tempVideo);
+            if (realDuration > maxDurationSec) {
+                throw new IllegalArgumentException(
+                        "Video is too long: " + realDuration + "s. Maximum allowed: " + maxDurationSec + "s.");
+            }
 
             String objectName = "videos/user" + userId + "/" + UUID.randomUUID() + ".mp4";
 
             try (InputStream is = Files.newInputStream(tempVideo)) {
-                minioService.uploadFile(objectName, is, Files.size(tempVideo), file.getContentType());
+                minioService.uploadFile(objectName, is, Files.size(tempVideo), "video/mp4");
             }
 
             UserVideo oldActive = user.getActiveVideo();
@@ -77,8 +97,27 @@ public class VideoService {
             if (tempVideo != null) {
                 try {
                     Files.deleteIfExists(tempVideo);
-                } catch (IOException ignored) {}
+                } catch (IOException ignored) {
+                }
             }
+        }
+    }
+
+    private void validateFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Video file is empty");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
+            throw new IllegalArgumentException(
+                    "Unsupported video format. Allowed: MP4, MOV, AVI.");
+        }
+
+        long maxBytes = maxSizeMb * 1024 * 1024;
+        if (file.getSize() > maxBytes) {
+            throw new IllegalArgumentException(
+                    "Video file size must not exceed " + maxSizeMb + " MB.");
         }
     }
 }

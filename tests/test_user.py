@@ -26,11 +26,13 @@ class TestUserController:
         assert resp.status_code == 200
         assert resp.json()["name"] == "NewName"
 
-    def test_update_profile_invalid_data(self, api_client, auth_headers):
+    def test_update_profile_invalid_name_empty(self, api_client, auth_headers):
         resp = api_client.put("/api/users/me", json={"name": ""}, headers=auth_headers)
         assert resp.status_code == 400
-        resp2 = api_client.put("/api/users/me", json={"radiusKm": -10}, headers=auth_headers)
-        assert resp2.status_code != 500
+
+    def test_update_profile_invalid_radius(self, api_client, auth_headers):
+        resp = api_client.put("/api/users/me", json={"name": "Name", "radiusKm": -10}, headers=auth_headers)
+        assert resp.status_code == 400
 
     def test_update_profile_unauthorized(self, api_client):
         resp = api_client.put("/api/users/me", json={"name": "Hacker"})
@@ -84,7 +86,6 @@ class TestUserController:
             files = {"file": (img_path, f, "image/jpeg")}
             upload_resp = api_client.post_file("/api/users/me/avatar", files=files, headers=auth_headers)
         assert upload_resp.status_code == 200
-        # затем удалим
         resp = api_client.delete("/api/users/me/avatar", headers=auth_headers)
         assert resp.status_code == 204
 
@@ -97,5 +98,16 @@ class TestUserController:
         assert resp.status_code == 401
 
     def test_update_profile_invalid_age_range(self, api_client, auth_headers):
-        resp = api_client.put("/api/users/me", json={"minAge": 40, "maxAge": 30}, headers=auth_headers)
-        assert resp.status_code in (200, 400)
+        resp = api_client.put("/api/users/me", json={"name": "Name", "minAge": 40, "maxAge": 30}, headers=auth_headers)
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "errors" in body
+        assert "minAge" in body["errors"]
+
+    def test_update_profile_min_age_below_18(self, api_client, auth_headers):
+        resp = api_client.put("/api/users/me", json={"name": "Name", "minAge": 16}, headers=auth_headers)
+        assert resp.status_code == 400
+
+    def test_update_profile_radius_too_large(self, api_client, auth_headers):
+        resp = api_client.put("/api/users/me", json={"name": "Name", "radiusKm": 9999}, headers=auth_headers)
+        assert resp.status_code == 400

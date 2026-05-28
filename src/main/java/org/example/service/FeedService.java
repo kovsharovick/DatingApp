@@ -1,11 +1,9 @@
 package org.example.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.entities.UserData;
-import org.example.entities.UserSwipe;
 import org.example.model.FeedItem;
 import org.example.model.Gender;
 import org.example.model.SwipeDirection;
@@ -46,10 +44,13 @@ public class FeedService {
 
     public void removeSwipedUserId(Long userId, Long targetUserId) {
         String key = feedIdsKey(userId);
-        Long removed = redisTemplate.opsForList().remove(key, 1, targetUserId);
-        if (removed != null && removed > 0) {
-            log.debug("Removed user {} from feed cache of user {}", targetUserId, userId);
+        Long removed = redisTemplate.opsForList().remove(key, 1, targetUserId.intValue() <= Integer.MAX_VALUE
+                ? targetUserId.intValue()
+                : targetUserId);
+        if (removed == null || removed == 0) {
+            redisTemplate.opsForList().remove(key, 1, targetUserId);
         }
+        log.debug("Attempted removal of user {} from feed cache of user {}", targetUserId, userId);
     }
 
     @Transactional(readOnly = true)
@@ -111,13 +112,11 @@ public class FeedService {
         LocalDate maxBirth = now.minusYears(currentUser.getMinAge() != null ? currentUser.getMinAge() : 18);
         String prefs = buildPrefsLiteral(currentUser.getPreferredGenders());
 
-        // 1. приоритетные
         List<Object[]> rows = userDataRepository.findPriorityCandidates(
                 userId, lat, lon, (double) radiusM, minBirth, maxBirth,
                 currentUser.getDateOfBirth(), prefs, limit);
         if (!rows.isEmpty()) return extractIds(rows);
 
-        // 2. обычные
         rows = userDataRepository.findRegularCandidates(
                 userId, lat, lon, (double) radiusM, minBirth, maxBirth,
                 currentUser.getDateOfBirth(), prefs, limit);

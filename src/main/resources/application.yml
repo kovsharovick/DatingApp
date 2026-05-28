@@ -2,6 +2,8 @@ spring:
   servlet:
     multipart:
       resolve-lazily: true
+      max-file-size: 200MB
+      max-request-size: 200MB
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/datingApp}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -20,15 +22,19 @@ spring:
       port: 6379
 
 jwt:
-  secret: i-have-very-big-harizma-and-this-is-my-very-long-and-very-secret-word-256-bite-min
+  #secret: ${JWT_SECRET}
+  secret: ${JWT_SECRET:defaultSecretKeyForDevOnlyDoNotUseInProduction}
   expiration: 86400000
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-  access-key: minioadmin
-  secret-key: minioadmin
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
 
 app:
   likes:
     free-daily-limit: 5
     premium-daily-limit: 100
+  video:
+    max-size-mb: 250
+    max-duration-sec: 120

@@ -4,8 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,7 +58,6 @@ public class ThumbnailService {
     }
 
     @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public CompletableFuture<String> generateAndUploadAsync(String videoObjectName, Long userId) {
         String thumbnailUrl = generateAndUpload(videoObjectName, userId);
         return CompletableFuture.completedFuture(thumbnailUrl);

@@ -51,13 +51,13 @@ public class UserService {
                 .city(city)
                 .gender(request.getGender())
                 .description(request.getDescription() != null ? request.getDescription() : "")
-                // по умолчанию если не переданы
                 .minAge(request.getMinAge() != null ? request.getMinAge() : 18)
                 .maxAge(request.getMaxAge() != null ? request.getMaxAge() : 99)
                 .radiusKm(request.getRadiusKm() != null ? request.getRadiusKm() : 50)
-                .preferredGenders(request.getPreferredGenders() != null ?
-                        request.getPreferredGenders() : Collections.emptyList())
                 .build();
+
+        user.setPreferredGenders(request.getPreferredGenders() != null ?
+                request.getPreferredGenders() : Collections.emptyList());
 
         user = userDataRepository.save(user);
         subscriptionService.createFreeSubscription(user.getId());
