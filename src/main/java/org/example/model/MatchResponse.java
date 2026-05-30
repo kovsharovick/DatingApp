@@ -17,4 +17,5 @@ public class MatchResponse {
     private String partnerCity;
     private LocalDateTime matchedAt;
     private String lastMessagePreview;
+    private String partnerAvatarUrl;
 }

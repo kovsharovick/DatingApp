@@ -14,7 +14,6 @@ import java.util.List;
 @ValidAgeRange
 public class UserUpdateRequest {
 
-    @NotBlank
     @Size(max = 100)
     private String name;
 
