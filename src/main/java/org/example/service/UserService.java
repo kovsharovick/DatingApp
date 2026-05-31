@@ -6,6 +6,7 @@ import org.example.entities.City;
 import org.example.entities.UserData;
 import org.example.model.*;
 import org.example.repository.CityRepository;
+import org.example.repository.UserBlockRepository;
 import org.example.repository.UserDataRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class UserService {
     private final JwtUtil jwtUtil;
     private final SubscriptionService subscriptionService;
     private final FeedService feedService;
+    private final UserBlockRepository blockRepository;
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     @Transactional
@@ -99,12 +101,10 @@ public class UserService {
 
         if (user.getActiveVideo() != null) {
             try {
-                videoUrl = minioService.getPresignedUrl(
-                        user.getActiveVideo().getVideoUrl());
+                videoUrl = minioService.getPresignedUrl(user.getActiveVideo().getVideoUrl());
             } catch (Exception e) {
                 log.error("Failed to get video URL for user {}: {}", userId, e.getMessage());
             }
-
             try {
                 String thumb = user.getActiveVideo().getThumbnailUrl();
                 if (thumb != null && !thumb.isBlank()) {
@@ -139,6 +139,62 @@ public class UserService {
                 .maxAge(user.getMaxAge())
                 .radiusKm(user.getRadiusKm())
                 .preferredGenders(user.getPreferredGenders())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public PublicUserProfileResponse getPublicProfile(Long targetId, Long requesterId) {
+        if (blockRepository.existsByBlocker_IdAndBlocked_Id(requesterId, targetId)) {
+            throw new RuntimeException("User not found");
+        }
+        if (blockRepository.existsByBlocker_IdAndBlocked_Id(targetId, requesterId)) {
+            throw new RuntimeException("User not found");
+        }
+
+        UserData user = userDataRepository.findById(targetId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.isHidden()) {
+            throw new RuntimeException("User not found");
+        }
+
+        String videoUrl = null;
+        String thumbnailUrl = null;
+        if (user.getActiveVideo() != null) {
+            try {
+                videoUrl = minioService.getPresignedUrl(user.getActiveVideo().getVideoUrl());
+            } catch (Exception e) {
+                log.error("Failed to get video URL for public profile {}: {}", targetId, e.getMessage());
+            }
+            try {
+                String thumb = user.getActiveVideo().getThumbnailUrl();
+                if (thumb != null && !thumb.isBlank()) {
+                    thumbnailUrl = minioService.getPresignedUrl(thumb);
+                }
+            } catch (Exception e) {
+                log.error("Failed to get thumbnail URL for public profile {}: {}", targetId, e.getMessage());
+            }
+        }
+
+        String avatarUrl = null;
+        try {
+            if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+                avatarUrl = minioService.getPresignedUrl(user.getAvatarUrl());
+            }
+        } catch (Exception e) {
+            log.error("Failed to get avatar URL for public profile {}: {}", targetId, e.getMessage());
+        }
+
+        return PublicUserProfileResponse.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .age(Period.between(user.getDateOfBirth(), LocalDate.now()).getYears())
+                .city(user.getCity().getCity())
+                .region(user.getCity().getRegion())
+                .description(user.getDescription())
+                .videoUrl(videoUrl)
+                .thumbnailUrl(thumbnailUrl)
+                .avatarUrl(avatarUrl)
                 .build();
     }
 

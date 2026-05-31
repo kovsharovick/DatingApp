@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.entities.UserData;
 import org.example.entities.UserVideo;
+import org.example.model.VideoResponse;
 import org.example.repository.UserDataRepository;
 import org.example.repository.UserVideoRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,8 +16,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -103,17 +106,50 @@ public class VideoService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getMyVideos(Long userId) {
+        return videoRepository.findByUserId(userId)
+                .stream()
+                .map(v -> toResponse(v, userId))
+                .collect(Collectors.toList());
+    }
+
+    private VideoResponse toResponse(UserVideo v, Long userId) {
+        String videoUrl = null;
+        String thumbnailUrl = null;
+        try {
+            videoUrl = minioService.getPresignedUrl(v.getVideoUrl());
+        } catch (Exception e) {
+            log.warn("Failed to get presigned URL for video {} of user {}", v.getId(), userId, e);
+        }
+        try {
+            if (v.getThumbnailUrl() != null && !v.getThumbnailUrl().isBlank()) {
+                thumbnailUrl = minioService.getPresignedUrl(v.getThumbnailUrl());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get presigned URL for thumbnail of video {}", v.getId(), e);
+        }
+        return VideoResponse.builder()
+                .id(v.getId())
+                .videoUrl(videoUrl)
+                .thumbnailUrl(thumbnailUrl)
+                .durationSec(v.getDurationSec())
+                .active(v.isActive())
+                .viewsCount(v.getViewsCount())
+                .likesCount(v.getLikesCount())
+                .createdAt(v.getCreatedAt())
+                .build();
+    }
+
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Video file is empty");
         }
-
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
             throw new IllegalArgumentException(
                     "Unsupported video format. Allowed: MP4, MOV, AVI.");
         }
-
         long maxBytes = maxSizeMb * 1024 * 1024;
         if (file.getSize() > maxBytes) {
             throw new IllegalArgumentException(

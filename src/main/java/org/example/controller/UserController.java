@@ -3,6 +3,7 @@ package org.example.controller;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.model.PublicUserProfileResponse;
 import org.example.model.UserProfileResponse;
 import org.example.model.UserUpdateRequest;
 import org.example.service.AvatarService;
@@ -27,15 +28,23 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> getProfile(Principal principal) {
         Long userId = Long.parseLong(principal.getName());
-        UserProfileResponse profile = userService.getProfile(userId);
-        return ResponseEntity.ok(profile);
+        return ResponseEntity.ok(userService.getProfile(userId));
     }
 
     @PutMapping("/me")
-    public ResponseEntity<UserProfileResponse> updateProfile(Principal principal, @Valid @RequestBody UserUpdateRequest request) {
+    public ResponseEntity<UserProfileResponse> updateProfile(
+            Principal principal,
+            @Valid @RequestBody UserUpdateRequest request) {
         Long userId = Long.parseLong(principal.getName());
-        UserProfileResponse updatedProfile = userService.updateProfile(userId, request);
-        return ResponseEntity.ok(updatedProfile);
+        return ResponseEntity.ok(userService.updateProfile(userId, request));
+    }
+
+    @GetMapping("/{id}/profile")
+    public ResponseEntity<PublicUserProfileResponse> getPublicProfile(
+            @PathVariable Long id,
+            Principal principal) {
+        Long requesterId = Long.parseLong(principal.getName());
+        return ResponseEntity.ok(userService.getPublicProfile(id, requesterId));
     }
 
     @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
