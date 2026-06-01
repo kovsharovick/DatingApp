@@ -141,7 +141,7 @@ public class FeedService {
     private Set<Long> getUsersWhoLikedMe(Long currentUserId, List<Long> candidateIds) {
         if (candidateIds.isEmpty()) return Set.of();
         return userSwipeRepository.findDistinctSwiperIdByTargetIdAndDirectionAndSwiperIdIn(
-                currentUserId, SwipeDirection.LIKE, candidateIds);
+                currentUserId, SwipeDirection.LIKE.name(), candidateIds);
     }
 
     private FeedItem buildFeedItem(UserData user, boolean likedYou) {

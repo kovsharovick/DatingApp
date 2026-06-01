@@ -14,25 +14,52 @@ import java.util.Set;
 
 public interface UserSwipeRepository extends JpaRepository<UserSwipe, Long> {
 
-    // проверка, свайпал ли уже пользователь
     boolean existsBySwiper_IdAndTarget_Id(Long swiperId, Long targetId);
 
-    // проверка существования конкретного направления
-    boolean existsBySwiper_IdAndTarget_IdAndDirection(Long swiperId, Long targetId, SwipeDirection direction);
+    @Query(value = """
+            SELECT COUNT(*) > 0
+            FROM user_swipes
+            WHERE swiper_id = :swiperId
+              AND target_id = :targetId
+              AND direction = CAST(:direction AS public."SWIPE")
+            """, nativeQuery = true)
+    boolean existsBySwiper_IdAndTarget_IdAndDirection(
+            @Param("swiperId") Long swiperId,
+            @Param("targetId") Long targetId,
+            @Param("direction") String direction);
 
-    // найти конкретный лайк/дизлайк
+    @Query(value = """
+            SELECT * FROM user_swipes
+            WHERE swiper_id = :swiperId
+              AND target_id = :targetId
+              AND direction = CAST(:direction AS public."SWIPE")
+            LIMIT 1
+            """, nativeQuery = true)
     Optional<UserSwipe> findBySwiper_IdAndTarget_IdAndDirection(
-            Long swiperId, Long targetId, SwipeDirection direction);
+            @Param("swiperId") Long swiperId,
+            @Param("targetId") Long targetId,
+            @Param("direction") String direction);
 
-    // удаление всех дизлайков, направленных на пользователя
     @Modifying
     @Transactional
-    @Query("DELETE FROM UserSwipe s WHERE s.target.id = :targetId AND s.direction = :direction")
-    void deleteByTargetIdAndDirection(@Param("targetId") Long targetId, @Param("direction") SwipeDirection direction);
+    @Query(value = """
+            DELETE FROM user_swipes
+            WHERE target_id = :targetId
+              AND direction = CAST(:direction AS public."SWIPE")
+            """, nativeQuery = true)
+    void deleteByTargetIdAndDirection(
+            @Param("targetId") Long targetId,
+            @Param("direction") String direction);
 
-    @Query("SELECT DISTINCT sw.swiper.id FROM UserSwipe sw WHERE sw.target.id = :targetId AND sw.direction = :direction AND sw.swiper.id IN :candidateIds")
+    @Query(value = """
+            SELECT DISTINCT sw.swiper_id
+            FROM user_swipes sw
+            WHERE sw.target_id = :targetId
+              AND sw.direction = CAST(:direction AS public."SWIPE")
+              AND sw.swiper_id IN (:candidateIds)
+            """, nativeQuery = true)
     Set<Long> findDistinctSwiperIdByTargetIdAndDirectionAndSwiperIdIn(
             @Param("targetId") Long targetId,
-            @Param("direction") SwipeDirection direction,
+            @Param("direction") String direction,
             @Param("candidateIds") Collection<Long> candidateIds);
 }

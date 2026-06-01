@@ -34,7 +34,7 @@ public class MatchCreationHelper {
         }
 
         boolean mutualLike = swipeRepository.existsBySwiper_IdAndTarget_IdAndDirection(
-                targetUserId, currentUserId, SwipeDirection.LIKE);
+                targetUserId, currentUserId, SwipeDirection.LIKE.name());
 
         if (!mutualLike) return false;
 

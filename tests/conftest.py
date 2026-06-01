@@ -1,5 +1,6 @@
 import pytest
 import requests
+import time
 
 BASE_URL = "http://localhost:8080"
 
@@ -46,7 +47,6 @@ def api_client():
 
 @pytest.fixture
 def unique_email():
-    import time
     return f"test_{int(time.time() * 1000)}@example.com"
 
 
@@ -72,5 +72,84 @@ def user_token(registered_user):
 
 
 @pytest.fixture
+def user_id(registered_user):
+    return registered_user[0]
+
+
+@pytest.fixture
 def auth_headers(user_token):
     return {"Authorization": f"Bearer {user_token}"}
+
+
+@pytest.fixture
+def second_user(api_client):
+    email = f"user2_{int(time.time() * 1000)}@example.com"
+    payload = {
+        "email": email,
+        "password": "secret123",
+        "name": "SecondUser",
+        "dateOfBirth": "1992-05-10",
+        "gender": "MALE",
+        "city": "Москва"
+    }
+    resp = api_client.post("/api/auth/register", json=payload)
+    assert resp.status_code == 201, f"Second user registration failed: {resp.text}"
+    data = resp.json()
+    return data["userId"], data["token"]
+
+
+@pytest.fixture
+def second_user_id(second_user):
+    return second_user[0]
+
+
+@pytest.fixture
+def second_user_token(second_user):
+    return second_user[1]
+
+
+@pytest.fixture
+def second_auth_headers(second_user_token):
+    return {"Authorization": f"Bearer {second_user_token}"}
+
+
+@pytest.fixture
+def third_user(api_client):
+    """A third registered user."""
+    email = f"user3_{int(time.time() * 1000)}@example.com"
+    payload = {
+        "email": email,
+        "password": "secret123",
+        "name": "ThirdUser",
+        "dateOfBirth": "1993-03-20",
+        "gender": "FEMALE",
+        "city": "Москва"
+    }
+    resp = api_client.post("/api/auth/register", json=payload)
+    assert resp.status_code == 201
+    data = resp.json()
+    return data["userId"], data["token"]
+
+
+@pytest.fixture
+def third_user_id(third_user):
+    return third_user[0]
+
+
+@pytest.fixture
+def third_auth_headers(third_user):
+    return {"Authorization": f"Bearer {third_user[1]}"}
+
+
+def make_match(api_client, user1_id, user1_token, user2_id, user2_token):
+    h1 = {"Authorization": f"Bearer {user1_token}"}
+    h2 = {"Authorization": f"Bearer {user2_token}"}
+    api_client.post("/api/swipes", json={"targetUserId": user2_id, "direction": "LIKE"}, headers=h1)
+    resp = api_client.post("/api/swipes", json={"targetUserId": user1_id, "direction": "LIKE"}, headers=h2)
+    matched = resp.json().get("data", False)
+    if matched:
+        matches = api_client.get("/api/matches", headers=h1).json()
+        for m in matches:
+            if m["partnerId"] == user2_id:
+                return m["matchId"]
+    return None
