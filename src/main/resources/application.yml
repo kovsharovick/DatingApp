@@ -20,7 +20,11 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: 6379
-
+  web:
+    cors:
+      allowed-origins: "*"
+      allowed-methods: "*"
+      allowed-headers: "*"
 jwt:
   #secret: ${JWT_SECRET}
   secret: ${JWT_SECRET:defaultSecretKeyForDevOnlyDoNotUseInProduction}
@@ -38,3 +42,11 @@ app:
   video:
     max-size-mb: 250
     max-duration-sec: 120
+server:
+  port: 8080
+  connection-timeout: 120000
+  tomcat:
+    keep-alive-timeout: 120000
+    threads:
+      max: 200
+    accept-count: 100
