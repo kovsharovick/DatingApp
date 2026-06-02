@@ -6,6 +6,7 @@ import org.example.entities.City;
 import org.example.entities.UserData;
 import org.example.model.*;
 import org.example.repository.CityRepository;
+import org.example.repository.UserBlockRepository;
 import org.example.repository.UserDataRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,12 +28,19 @@ public class UserService {
     private final MinioService minioService;
     private final CityService cityService;
     private final JwtUtil jwtUtil;
+    private final SubscriptionService subscriptionService;
+    private final FeedService feedService;
+    private final UserBlockRepository blockRepository;
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userDataRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already in use");
+        }
+        LocalDate dob = LocalDate.parse(request.getDateOfBirth());
+        if (Period.between(dob, LocalDate.now()).getYears() < 18) {
+            throw new RuntimeException("User must be at least 18 years old");
         }
         City city = cityService.findCityByName(request.getCity())
                 .orElseThrow(() -> new RuntimeException("City not found"));
@@ -41,19 +49,20 @@ public class UserService {
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .name(request.getName())
-                .dateOfBirth(LocalDate.parse(request.getDateOfBirth()))
+                .dateOfBirth(dob)
                 .city(city)
                 .gender(request.getGender())
                 .description(request.getDescription() != null ? request.getDescription() : "")
-                // по умолчанию если не переданы
                 .minAge(request.getMinAge() != null ? request.getMinAge() : 18)
                 .maxAge(request.getMaxAge() != null ? request.getMaxAge() : 99)
                 .radiusKm(request.getRadiusKm() != null ? request.getRadiusKm() : 50)
-                .preferredGenders(request.getPreferredGenders() != null ?
-                        request.getPreferredGenders() : Collections.emptyList())
                 .build();
 
+        user.setPreferredGenders(request.getPreferredGenders() != null ?
+                request.getPreferredGenders() : Collections.emptyList());
+
         user = userDataRepository.save(user);
+        subscriptionService.createFreeSubscription(user.getId());
 
         String token = jwtUtil.generateToken(user.getId());
 
@@ -88,12 +97,31 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String videoUrl = null;
-        try {
-            if (user.getActiveVideo() != null) {
+        String thumbnailUrl = null;
+
+        if (user.getActiveVideo() != null) {
+            try {
                 videoUrl = minioService.getPresignedUrl(user.getActiveVideo().getVideoUrl());
+            } catch (Exception e) {
+                log.error("Failed to get video URL for user {}: {}", userId, e.getMessage());
+            }
+            try {
+                String thumb = user.getActiveVideo().getThumbnailUrl();
+                if (thumb != null && !thumb.isBlank()) {
+                    thumbnailUrl = minioService.getPresignedUrl(thumb);
+                }
+            } catch (Exception e) {
+                log.error("Failed to get thumbnail URL for user {}: {}", userId, e.getMessage());
+            }
+        }
+
+        String avatarUrl = null;
+        try {
+            if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+                avatarUrl = minioService.getPresignedUrl(user.getAvatarUrl());
             }
         } catch (Exception e) {
-            log.error("Failed to generate presigned URL for user {}: {}", userId, e.getMessage(), e);
+            log.error("Failed to get avatar URL for user {}: {}", userId, e.getMessage());
         }
 
         return UserProfileResponse.builder()
@@ -104,11 +132,69 @@ public class UserService {
                 .region(user.getCity().getRegion())
                 .description(user.getDescription())
                 .videoUrl(videoUrl)
+                .thumbnailUrl(thumbnailUrl)
+                .avatarUrl(avatarUrl)
                 .hidden(user.isHidden())
                 .minAge(user.getMinAge())
                 .maxAge(user.getMaxAge())
                 .radiusKm(user.getRadiusKm())
                 .preferredGenders(user.getPreferredGenders())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public PublicUserProfileResponse getPublicProfile(Long targetId, Long requesterId) {
+        if (blockRepository.existsByBlocker_IdAndBlocked_Id(requesterId, targetId)) {
+            throw new RuntimeException("User not found");
+        }
+        if (blockRepository.existsByBlocker_IdAndBlocked_Id(targetId, requesterId)) {
+            throw new RuntimeException("User not found");
+        }
+
+        UserData user = userDataRepository.findById(targetId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.isHidden()) {
+            throw new RuntimeException("User not found");
+        }
+
+        String videoUrl = null;
+        String thumbnailUrl = null;
+        if (user.getActiveVideo() != null) {
+            try {
+                videoUrl = minioService.getPresignedUrl(user.getActiveVideo().getVideoUrl());
+            } catch (Exception e) {
+                log.error("Failed to get video URL for public profile {}: {}", targetId, e.getMessage());
+            }
+            try {
+                String thumb = user.getActiveVideo().getThumbnailUrl();
+                if (thumb != null && !thumb.isBlank()) {
+                    thumbnailUrl = minioService.getPresignedUrl(thumb);
+                }
+            } catch (Exception e) {
+                log.error("Failed to get thumbnail URL for public profile {}: {}", targetId, e.getMessage());
+            }
+        }
+
+        String avatarUrl = null;
+        try {
+            if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+                avatarUrl = minioService.getPresignedUrl(user.getAvatarUrl());
+            }
+        } catch (Exception e) {
+            log.error("Failed to get avatar URL for public profile {}: {}", targetId, e.getMessage());
+        }
+
+        return PublicUserProfileResponse.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .age(Period.between(user.getDateOfBirth(), LocalDate.now()).getYears())
+                .city(user.getCity().getCity())
+                .region(user.getCity().getRegion())
+                .description(user.getDescription())
+                .videoUrl(videoUrl)
+                .thumbnailUrl(thumbnailUrl)
+                .avatarUrl(avatarUrl)
                 .build();
     }
 
@@ -151,6 +237,17 @@ public class UserService {
         }
 
         userDataRepository.save(user);
+
+        boolean feedAffected = request.getMinAge() != null
+                || request.getMaxAge() != null
+                || request.getRadiusKm() != null
+                || request.getPreferredGenders() != null
+                || (request.getCity() != null && !request.getCity().isEmpty());
+
+        if (feedAffected) {
+            feedService.invalidateFeedCache(userId);
+            log.debug("Feed cache invalidated for user {} after profile update", userId);
+        }
 
         return getProfile(userId);
     }

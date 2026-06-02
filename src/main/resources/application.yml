@@ -1,8 +1,13 @@
 spring:
+  servlet:
+    multipart:
+      resolve-lazily: true
+      max-file-size: 200MB
+      max-request-size: 200MB
   datasource:
-    url: jdbc:postgresql://localhost:5432/datingApp
-    username: postgres
-    password: 1111
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/datingApp}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:1111}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -13,15 +18,23 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   data:
     redis:
-      host: localhost
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: 6379
 
 jwt:
-  secret: i-have-very-big-harizma-and-this-is-my-very-long-and-very-secret-word-256-bite-min
+  #secret: ${JWT_SECRET}
+  secret: ${JWT_SECRET:defaultSecretKeyForDevOnlyDoNotUseInProduction}
   expiration: 86400000
 
 minio:
-  endpoint: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
 
+app:
+  likes:
+    free-daily-limit: 5
+    premium-daily-limit: 100
+  video:
+    max-size-mb: 250
+    max-duration-sec: 120

@@ -16,4 +16,6 @@ public class FeedItem {
     private String videoUrl;
     private String description;
     private boolean likedYou;
+    private String avatarUrl;
+    private String thumbnailUrl;
 }

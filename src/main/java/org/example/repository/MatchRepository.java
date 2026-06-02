@@ -10,4 +10,6 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
 
     @Query("SELECT m FROM Match m WHERE m.user1.id = :userId OR m.user2.id = :userId")
     List<Match> findAllByUserId(Long userId);
+
+    boolean existsByUser1IdAndUser2Id(Long user1Id, Long user2Id);
 }

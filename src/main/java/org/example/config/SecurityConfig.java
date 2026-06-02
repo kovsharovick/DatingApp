@@ -39,7 +39,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/auth/**",
-                                "/api/cities",
                                 "/api/cities/**",
                                 "/ws/**",
                                 "/swagger-ui/**",

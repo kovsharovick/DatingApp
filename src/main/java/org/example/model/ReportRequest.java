@@ -13,6 +13,6 @@ public class ReportRequest {
     private Long reportedUserId;
 
     @NotBlank
-    @Size(max = 500)
+    @Size(max = 255)
     private String reason;
 }

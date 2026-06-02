@@ -1,12 +1,9 @@
 package org.example.entities;
 
-import io.hypersistence.utils.hibernate.type.array.EnumArrayType;
-import org.hibernate.annotations.ColumnTransformer;
-import org.hibernate.annotations.Parameter;
 import lombok.*;
+import lombok.experimental.Accessors;
 import jakarta.persistence.*;
 import org.example.model.Gender;
-import org.hibernate.annotations.Type;
 
 import java.time.*;
 import java.util.ArrayList;
@@ -45,7 +42,7 @@ public class UserData {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    @ColumnTransformer(write = "CAST(? AS public.\"GENDER\")")
+    @org.hibernate.annotations.ColumnTransformer(write = "CAST(? AS public.\"GENDER\")")
     private Gender gender;
 
     @Column(columnDefinition = "TEXT DEFAULT ''")
@@ -69,9 +66,6 @@ public class UserData {
     @Column(name = "preferred_gender", columnDefinition = "text")
     private String preferredGenderJson;
 
-    @Transient
-    private List<Gender> preferredGenders;
-
     @Column(name = "min_age")
     private Integer minAge;
 
@@ -80,6 +74,9 @@ public class UserData {
 
     @Column(name = "radius_km")
     private Integer radiusKm;
+
+    @Column(name = "avatar_url")
+    private String avatarUrl;
 
     @PrePersist
     public void prePersist() {
@@ -96,14 +93,12 @@ public class UserData {
         if (preferredGenderJson == null || preferredGenderJson.isBlank()) {
             return new ArrayList<>();
         }
-        // Простейшая реализация: разделение запятой, без пробелов
         return Arrays.stream(preferredGenderJson.split(","))
                 .map(Gender::valueOf)
                 .collect(Collectors.toList());
     }
 
     public void setPreferredGenders(List<Gender> genders) {
-        this.preferredGenders = genders;
         if (genders == null || genders.isEmpty()) {
             this.preferredGenderJson = null;
         } else {
