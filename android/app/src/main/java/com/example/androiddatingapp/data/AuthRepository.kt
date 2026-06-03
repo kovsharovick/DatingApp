@@ -12,6 +12,7 @@ import com.example.androiddatingapp.ui.util.DateOfBirthInput
 class AuthRepository(
     private val api: DatingApiService = ApiClient.api,
     private val sessionStore: SessionStore,
+    private val datingRepository: DatingRepository = DatingRepository(),
 ) {
 
     init {
@@ -52,6 +53,9 @@ class AuthRepository(
         val uiDateOfBirth = dateOfBirth.trim()
         val apiDateOfBirth = DateOfBirthInput.toApiIsoDate(uiDateOfBirth)
             ?: return Result.failure(Exception("Некорректная дата рождения"))
+        val resolvedCity = datingRepository.resolveCityForRegistration(city)
+            .getOrElse { return Result.failure(it) }
+
         return runCatching {
             val auth = api.register(
                 RegisterRequest(
@@ -61,7 +65,7 @@ class AuthRepository(
                     // UI: dd-MM-yyyy → API/БД: yyyy-MM-dd
                     dateOfBirth = apiDateOfBirth,
                     gender = gender.name,
-                    city = city.trim(),
+                    city = resolvedCity,
                 ),
             )
             sessionStore.save(
@@ -76,12 +80,6 @@ class AuthRepository(
                 dateOfBirth = uiDateOfBirth,
                 gender = gender,
             )
-        }.mapError()
-    }
-
-    suspend fun searchCities(prefix: String): Result<List<String>> {
-        return runCatching {
-            api.searchCities(prefix.trim())
         }.mapError()
     }
 
@@ -101,20 +99,21 @@ class AuthRepository(
         )
     }
 
-    private fun UserProfileResponse.toUserAccount(email: String): UserAccount = UserAccount(
-        userId = id,
-        authToken = sessionStore.token,
-        email = email,
-        name = name,
-        dateOfBirth = "", // бэкенд пока не отдаёт дату рождения в /me
-        gender = Gender.MALE, // бэкенд пока не отдаёт пол в /me
-        city = city,
-        description = description.orEmpty(),
-        hasVideo = !videoUrl.isNullOrBlank(),
-        videoTitle = if (!videoUrl.isNullOrBlank()) "profile_video" else "",
-        isProfileActive = !hidden,
-        onboardingCompleted = true,
-    )
+    private fun UserProfileResponse.toUserAccount(email: String): UserAccount =
+        UserAccount(
+            userId = id,
+            authToken = sessionStore.token,
+            email = email,
+            name = name,
+            dateOfBirth = "",
+            gender = Gender.MALE,
+            city = city,
+            description = description.orEmpty(),
+            hasVideo = !videoUrl.isNullOrBlank(),
+            videoTitle = if (!videoUrl.isNullOrBlank()) "profile_video" else "",
+            isProfileActive = !hidden,
+            onboardingCompleted = !videoUrl.isNullOrBlank(),
+        )
 
     private fun <T> Result<T>.mapError(): Result<T> =
         exceptionOrNull()?.let { Result.failure(Exception(ApiClient.parseErrorMessage(it))) }

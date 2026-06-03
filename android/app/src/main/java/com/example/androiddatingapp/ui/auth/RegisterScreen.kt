@@ -62,6 +62,7 @@ fun RegisterScreen(
     var dateOfBirth by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf<Gender?>(null) }
     var city by remember { mutableStateOf("") }
+    var citySelectedFromList by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -147,14 +148,27 @@ fun RegisterScreen(
             Spacer(Modifier.height(scaleDp(12f)))
             CityAutocompleteField(
                 value = city,
-                onValueChange = { city = it; localError = null },
+                onValueChange = {
+                    city = it
+                    citySelectedFromList = false
+                    localError = null
+                },
+                onCitySelected = {
+                    city = it
+                    citySelectedFromList = true
+                    localError = null
+                },
                 onSearch = onSearchCities,
                 scaleSp = scaleSp,
                 scaleDp = scaleDp,
             )
             Spacer(Modifier.height(scaleDp(4f)))
             Text(
-                text = "Выберите город из выпадающего списка (например, Воронеж)",
+                text = if (citySelectedFromList) {
+                    "Город выбран: $city"
+                } else {
+                    "Нажмите на город в списке. Для регистрации в БД сервера должны быть те же города (datinfAppPlain.sql)."
+                },
                 fontSize = scaleSp(11f),
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
@@ -183,6 +197,11 @@ fun RegisterScreen(
             Button(
                 onClick = {
                     val err = AuthValidation.validateRegisterProfile(name, dateOfBirth, gender, city)
+                        ?: if (!citySelectedFromList) {
+                            "Выберите город из списка подсказок (нажмите на строку)"
+                        } else {
+                            null
+                        }
                     if (err != null) {
                         localError = err
                     } else {

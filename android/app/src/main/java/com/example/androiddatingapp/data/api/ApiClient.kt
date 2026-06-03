@@ -59,7 +59,13 @@ object ApiClient {
         if (!body.isNullOrBlank()) {
             try {
                 val parsed = gson.fromJson(body, ApiErrorBody::class.java)
-                parsed.error?.let { return it }
+                parsed.error?.let { raw ->
+                    return when {
+                        raw.contains("City not found", ignoreCase = true) ->
+                            "Город не найден на сервере. Выберите город из списка подсказок."
+                        else -> raw
+                    }
+                }
                 parsed.errors?.let { errors ->
                     val first = errors.values.firstOrNull()?.toString()
                     if (!first.isNullOrBlank()) return first

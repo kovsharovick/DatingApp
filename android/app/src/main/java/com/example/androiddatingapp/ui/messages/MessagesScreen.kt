@@ -23,7 +23,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,31 +38,65 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 @Composable
-fun rememberInboxHasUnread(): Boolean {
-    val notifications = remember { demoNotifications() }
-    val chats = remember { demoChats() }
-    return notifications.any { !it.isRead } || chats.any { it.unreadCount > 0 }
+fun rememberInboxHasUnread(
+    loadMatches: suspend () -> Result<List<ChatUi>>,
+): Boolean {
+    var hasUnread by remember { mutableStateOf(false) }
+    LaunchedEffect(loadMatches) {
+        loadMatches()
+            .onSuccess { chats -> hasUnread = chats.any { it.unreadCount > 0 } }
+    }
+    return hasUnread
 }
 
 @Composable
 fun MessagesScreen(
+    currentUserId: Long?,
+    loadMatches: suspend () -> Result<List<ChatUi>>,
+    loadMessages: suspend (matchId: Long, currentUserId: Long?) -> Result<List<MessageUi>>,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val notifications = remember { demoNotifications() }
-    val chats = remember { demoChats() }
+
+    var chats by remember { mutableStateOf<List<ChatUi>>(emptyList()) }
+    var chatsLoading by remember { mutableStateOf(true) }
+    var chatsError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(loadMatches) {
+        chatsLoading = true
+        chatsError = null
+        loadMatches()
+            .onSuccess { chats = it }
+            .onFailure { chatsError = it.message }
+        chatsLoading = false
+    }
 
     var showNotifications by remember { mutableStateOf(false) }
-    var selectedChatId by remember { mutableStateOf<String?>(null) }
-    val selectedChat = chats.firstOrNull { it.id == selectedChatId }
+    var selectedMatchId by remember { mutableLongStateOf(-1L) }
+    val selectedChat = if (selectedMatchId >= 0) {
+        chats.firstOrNull { it.matchId == selectedMatchId }
+    } else {
+        null
+    }
+
+    LaunchedEffect(selectedMatchId, currentUserId) {
+        if (selectedMatchId < 0) return@LaunchedEffect
+        loadMessages(selectedMatchId, currentUserId)
+            .onSuccess { messages ->
+                chats = chats.map { chat ->
+                    if (chat.matchId == selectedMatchId) chat.copy(messages = messages) else chat
+                }
+            }
+    }
 
     Box(modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxSize()) {
             when {
                 selectedChat != null -> ChatDetail(
                     chat = selectedChat,
-                    onBack = { selectedChatId = null },
+                    onBack = { selectedMatchId = -1L },
                     scaleDp = scaleDp,
                     scaleSp = scaleSp,
                     modifier = Modifier.fillMaxSize()
@@ -75,8 +111,10 @@ fun MessagesScreen(
                 else -> InboxList(
                     notifications = notifications,
                     chats = chats,
+                    chatsLoading = chatsLoading,
+                    chatsError = chatsError,
                     onOpenNotifications = { showNotifications = true },
-                    onOpenChat = { selectedChatId = it },
+                    onOpenChat = { selectedMatchId = it },
                     scaleDp = scaleDp,
                     scaleSp = scaleSp,
                     modifier = Modifier.fillMaxSize()
@@ -92,21 +130,6 @@ private data class NotificationUi(
     val body: String,
     val time: String,
     val isRead: Boolean
-)
-
-private data class ChatUi(
-    val id: String,
-    val name: String,
-    val lastMessage: String,
-    val time: String,
-    val unreadCount: Int,
-    val messages: List<MessageUi>
-)
-
-private data class MessageUi(
-    val fromMe: Boolean,
-    val text: String,
-    val time: String
 )
 
 private fun demoNotifications() = listOf(
@@ -133,47 +156,14 @@ private fun demoNotifications() = listOf(
     )
 )
 
-private fun demoChats() = listOf(
-    ChatUi(
-        id = "c1",
-        name = "София",
-        lastMessage = "Ты знаешь что такое 67?",
-        time = "10:14",
-        unreadCount = 2,
-        messages = listOf(
-            MessageUi(fromMe = false, text = "Привет!", time = "10:14"),
-            MessageUi(fromMe = false, text = "Ты знаешь что такое 67?", time = "10:15")
-        )
-    ),
-    ChatUi(
-        id = "c2",
-        name = "Мария",
-        lastMessage = "Окей, давай вечером созвонимся.",
-        time = "Вчера",
-        unreadCount = 0,
-        messages = listOf(
-            MessageUi(fromMe = true, text = "Абоба.", time = "19:03"),
-            MessageUi(fromMe = false, text = "Окей, давай вечером созвонимся.", time = "19:05")
-        )
-    ),
-    ChatUi(
-        id = "c3",
-        name = "Екатерина",
-        lastMessage = "Ты из какого района?",
-        time = "Пн",
-        unreadCount = 1,
-        messages = listOf(
-            MessageUi(fromMe = false, text = "Ты из какого района?", time = "12:40")
-        )
-    )
-)
-
 @Composable
 private fun InboxList(
     notifications: List<NotificationUi>,
     chats: List<ChatUi>,
+    chatsLoading: Boolean,
+    chatsError: String?,
     onOpenNotifications: () -> Unit,
-    onOpenChat: (String) -> Unit,
+    onOpenChat: (Long) -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -204,10 +194,40 @@ private fun InboxList(
                         .padding(horizontal = scaleDp(12f), vertical = scaleDp(6f))
                 )
             }
-            items(chats, key = { it.id }) { chat ->
+            if (chatsLoading) {
+                item(key = "loading") {
+                    Text(
+                        text = "Загрузка чатов…",
+                        fontSize = scaleSp(14f),
+                        modifier = Modifier.padding(scaleDp(16f)),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    )
+                }
+            }
+            if (chatsError != null) {
+                item(key = "error") {
+                    Text(
+                        text = chatsError,
+                        fontSize = scaleSp(14f),
+                        modifier = Modifier.padding(scaleDp(16f)),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            if (!chatsLoading && chats.isEmpty() && chatsError == null) {
+                item(key = "empty") {
+                    Text(
+                        text = "Пока нет совпадений. Лайкайте анкеты в ленте.",
+                        fontSize = scaleSp(14f),
+                        modifier = Modifier.padding(scaleDp(16f)),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    )
+                }
+            }
+            items(chats, key = { it.matchId }) { chat ->
                 ChatRow(
                     chat = chat,
-                    onClick = { onOpenChat(chat.id) },
+                    onClick = { onOpenChat(chat.matchId) },
                     scaleDp = scaleDp,
                     scaleSp = scaleSp,
                     modifier = Modifier

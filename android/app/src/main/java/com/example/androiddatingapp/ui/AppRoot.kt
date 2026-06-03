@@ -22,17 +22,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.androiddatingapp.data.AuthRepository
+import com.example.androiddatingapp.data.DatingRepository
 import com.example.androiddatingapp.data.SessionStore
+import com.example.androiddatingapp.data.api.dto.MessageDto
+import com.example.androiddatingapp.data.api.dto.UserUpdateRequestDto
 import com.example.androiddatingapp.ui.auth.LoginScreen
 import com.example.androiddatingapp.ui.auth.OnboardingScreen
 import com.example.androiddatingapp.ui.auth.RegisterScreen
 import com.example.androiddatingapp.ui.components.BottomTabs
 import com.example.androiddatingapp.ui.home.HomeScreen
+import com.example.androiddatingapp.ui.messages.ChatUi
+import com.example.androiddatingapp.ui.messages.MessageUi
 import com.example.androiddatingapp.ui.messages.MessagesScreen
 import com.example.androiddatingapp.ui.messages.rememberInboxHasUnread
 import com.example.androiddatingapp.ui.model.ScreenInfo
 import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.profile.ProfileScreen
+import com.example.androiddatingapp.ui.profile.UserProfileUi
 import com.example.androiddatingapp.ui.util.rememberScreenScale
 import kotlinx.coroutines.launch
 
@@ -46,8 +52,12 @@ fun AppRoot(
     val context = LocalContext.current
     val scale = rememberScreenScale(screen)
     val scope = rememberCoroutineScope()
+    val datingRepository = remember { DatingRepository() }
     val authRepository = remember {
-        AuthRepository(sessionStore = SessionStore(context.applicationContext))
+        AuthRepository(
+            sessionStore = SessionStore(context.applicationContext),
+            datingRepository = datingRepository,
+        )
     }
 
     var session by remember { mutableStateOf<UserAccount?>(null) }
@@ -60,8 +70,13 @@ fun AppRoot(
     var openProfileSettings by remember { mutableStateOf(false) }
     var openProfileSubscription by remember { mutableStateOf(false) }
 
-    val searchCities: suspend (String) -> Result<List<String>> = remember(authRepository) {
-        { prefix -> authRepository.searchCities(prefix) }
+    val searchCities: suspend (String) -> Result<List<String>> = remember(datingRepository, context) {
+        { query -> datingRepository.searchCities(context, query) }
+    }
+    suspend fun syncSubscription(account: UserAccount): UserAccount {
+        return datingRepository.getSubscription()
+            .map { sub -> DatingRepository.accountWithLikesRemaining(account, sub.likesRemaining) }
+            .getOrElse { account }
     }
 
     fun openProfileTab(openSettings: Boolean = false, openSubscription: Boolean = false) {
@@ -73,7 +88,7 @@ fun AppRoot(
     LaunchedEffect(authRepository) {
         restoringSession = true
         authRepository.restoreSession()
-            .onSuccess { session = it }
+            .onSuccess { account -> session = syncSubscription(account) }
         restoringSession = false
     }
 
@@ -98,7 +113,7 @@ fun AppRoot(
                             scope.launch {
                                 authRepository.login(email, password)
                                     .onSuccess { account ->
-                                        session = account.copy(onboardingCompleted = account.hasVideo)
+                                        session = syncSubscription(account)
                                         selectedTab = 0
                                     }
                                     .onFailure { authError = it.message }
@@ -122,7 +137,7 @@ fun AppRoot(
                             scope.launch {
                                 authRepository.register(email, password, name, dateOfBirth, gender, city)
                                     .onSuccess { account ->
-                                        session = account.copy(onboardingCompleted = account.hasVideo)
+                                        session = syncSubscription(account)
                                         selectedTab = 0
                                         authMode = AuthMode.Login
                                     }
@@ -149,12 +164,19 @@ fun AppRoot(
                 OnboardingScreen(
                     userName = user.name,
                     onComplete = { description, videoUploaded ->
-                        session = user.copy(
-                            description = description,
-                            hasVideo = videoUploaded,
-                            videoTitle = if (videoUploaded) "video_profile_v1.mp4" else "",
-                            onboardingCompleted = true,
-                        )
+                        scope.launch {
+                            if (description.isNotBlank()) {
+                                datingRepository.updateProfile(
+                                    UserUpdateRequestDto(description = description),
+                                )
+                            }
+                            session = user.copy(
+                                description = description,
+                                hasVideo = videoUploaded || user.hasVideo,
+                                videoTitle = if (videoUploaded || user.hasVideo) "profile_video" else "",
+                                onboardingCompleted = videoUploaded || user.hasVideo,
+                            )
+                        }
                     },
                     onSkip = {
                         session = user.copy(onboardingCompleted = true)
@@ -167,7 +189,13 @@ fun AppRoot(
 
             else -> {
                 val user = session!!
-                val inboxHasUnread = rememberInboxHasUnread()
+                val inboxHasUnread = rememberInboxHasUnread(
+                    loadMatches = {
+                        datingRepository.getMatches().map { matches ->
+                            matches.map { it.toChatUi() }
+                        }
+                    },
+                )
 
                 when (selectedTab) {
                     0 -> HomeScreen(
@@ -175,15 +203,34 @@ fun AppRoot(
                         isProfileActive = user.isProfileActive,
                         canLike = user.canLike(),
                         remainingLikes = user.remainingLikes(),
-                        onLikeConsumed = { session = user.withLikeConsumed() },
+                        onLikeConsumed = {
+                            scope.launch {
+                                session?.let { current ->
+                                    session = syncSubscription(current.withLikeConsumed())
+                                }
+                            }
+                        },
                         onOpenSubscription = { openProfileTab(openSubscription = true) },
                         onOpenProfile = { openProfileTab() },
                         onOpenSettings = { openProfileTab(openSettings = true) },
+                        loadFeed = { datingRepository.getFeed() },
+                        onSwipe = { userId, like -> datingRepository.swipe(userId, like) },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
                         modifier = Modifier.weight(1f),
                     )
                     1 -> MessagesScreen(
+                        currentUserId = user.userId,
+                        loadMatches = {
+                            datingRepository.getMatches().map { list ->
+                                list.map { it.toChatUi() }
+                            }
+                        },
+                        loadMessages = { matchId, myUserId ->
+                            datingRepository.getMessageHistory(matchId).map { messages ->
+                                messages.map { it.toMessageUi(myUserId) }
+                            }
+                        },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
                         modifier = Modifier.weight(1f),
@@ -192,6 +239,31 @@ fun AppRoot(
                         account = user,
                         onAccountUpdate = { session = it },
                         onSearchCities = searchCities,
+                        onSaveProfile = { profile ->
+                            val updated = user.copy(
+                                name = profile.name,
+                                dateOfBirth = profile.dateOfBirth,
+                                city = profile.city,
+                                description = profile.description,
+                                gender = profile.gender,
+                            )
+                            datingRepository.updateProfileFromAccount(
+                                email = user.email,
+                                account = updated,
+                                dateOfBirth = profile.dateOfBirth,
+                                gender = profile.gender,
+                            )
+                        },
+                        onToggleProfileActive = { active ->
+                            datingRepository.setProfileHidden(hidden = !active).map {
+                                user.copy(isProfileActive = active)
+                            }
+                        },
+                        onActivatePremium = {
+                            datingRepository.activatePremium(30).map {
+                                datingRepository.getSubscription().getOrThrow().likesRemaining
+                            }
+                        },
                         openSettings = openProfileSettings,
                         onOpenSettingsConsumed = { openProfileSettings = false },
                         openSubscription = openProfileSubscription,
@@ -227,3 +299,18 @@ fun AppRoot(
         }
     }
 }
+
+private fun com.example.androiddatingapp.data.api.dto.MatchDto.toChatUi(): ChatUi = ChatUi(
+    matchId = matchId,
+    name = partnerName,
+    lastMessage = lastMessagePreview.orEmpty(),
+    time = DatingRepository.formatDateTime(matchedAt),
+    unreadCount = 0,
+    messages = emptyList(),
+)
+
+private fun MessageDto.toMessageUi(currentUserId: Long?): MessageUi = MessageUi(
+    fromMe = currentUserId != null && senderId == currentUserId,
+    text = content,
+    time = DatingRepository.formatDateTime(sentAt),
+)

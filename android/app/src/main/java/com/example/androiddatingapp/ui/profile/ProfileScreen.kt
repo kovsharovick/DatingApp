@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,7 @@ import com.example.androiddatingapp.ui.components.DateOfBirthTextField
 import com.example.androiddatingapp.ui.components.ExpandableDescription
 import com.example.androiddatingapp.ui.components.GlowingSubscriptionButton
 import com.example.androiddatingapp.ui.components.PasswordTextField
+import com.example.androiddatingapp.data.DatingRepository
 import com.example.androiddatingapp.ui.model.Gender
 import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.theme.AppBlue
@@ -58,6 +60,7 @@ import com.example.androiddatingapp.ui.theme.DarkBackground
 import com.example.androiddatingapp.ui.theme.DarkCard
 import com.example.androiddatingapp.ui.util.DateOfBirthInput
 import com.example.androiddatingapp.ui.util.formatAgeLabel
+import kotlinx.coroutines.launch
 
 private const val DESCRIPTION_MAX_LENGTH = 500
 
@@ -89,14 +92,19 @@ fun ProfileScreen(
     openSubscription: Boolean = false,
     onOpenSubscriptionConsumed: () -> Unit = {},
     onSearchCities: suspend (String) -> Result<List<String>>,
+    onSaveProfile: suspend (UserProfileUi) -> Result<UserAccount>,
+    onToggleProfileActive: suspend (Boolean) -> Result<UserAccount>,
+    onActivatePremium: suspend () -> Result<Int>,
     onLogout: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
 ) {
+    val scope = rememberCoroutineScope()
     val profile = account.toProfileUi()
 
     var editSheetOpen by remember { mutableStateOf(false) }
+    var profileError by remember { mutableStateOf<String?>(null) }
     var settingsSheetOpen by remember { mutableStateOf(false) }
     var changeVideoSheetOpen by remember { mutableStateOf(false) }
     var changePasswordOpen by remember { mutableStateOf(false) }
@@ -147,15 +155,15 @@ fun ProfileScreen(
             onSearchCities = onSearchCities,
             onDismiss = { editSheetOpen = false },
             onSave = { updated ->
-                onAccountUpdate(
-                    account.copy(
-                        name = updated.name,
-                        dateOfBirth = updated.dateOfBirth,
-                        city = updated.city,
-                        description = updated.description.take(DESCRIPTION_MAX_LENGTH),
-                    )
-                )
-                editSheetOpen = false
+                scope.launch {
+                    profileError = null
+                    onSaveProfile(updated)
+                        .onSuccess { saved ->
+                            onAccountUpdate(saved)
+                            editSheetOpen = false
+                        }
+                        .onFailure { profileError = it.message }
+                }
             },
             scaleDp = scaleDp,
             scaleSp = scaleSp
@@ -167,7 +175,12 @@ fun ProfileScreen(
             onDismiss = { settingsSheetOpen = false },
             isProfileActive = account.isProfileActive,
             onToggleProfileActive = { active ->
-                onAccountUpdate(account.copy(isProfileActive = active))
+                scope.launch {
+                    profileError = null
+                    onToggleProfileActive(active)
+                        .onSuccess { saved -> onAccountUpdate(saved) }
+                        .onFailure { profileError = it.message }
+                }
             },
             onChangePassword = { changePasswordOpen = true },
             onLogout = onLogout,
@@ -213,24 +226,24 @@ fun ProfileScreen(
         SwipeSubscriptionSheet(
             remainingLikes = account.remainingLikes(),
             onDismiss = { subscriptionSheetOpen = false },
-            onPurchase = { packSize ->
-                onAccountUpdate(account.withBonusLikesPurchased(packSize))
-                subscriptionSheetOpen = false
+            onPurchase = { _ ->
+                scope.launch {
+                    profileError = null
+                    onActivatePremium()
+                        .onSuccess { likesRemaining ->
+                            onAccountUpdate(
+                                DatingRepository.accountWithLikesRemaining(account, likesRemaining),
+                            )
+                            subscriptionSheetOpen = false
+                        }
+                        .onFailure { profileError = it.message }
+                }
             },
             scaleDp = scaleDp,
             scaleSp = scaleSp,
         )
     }
 }
-
-private data class UserProfileUi(
-    val name: String,
-    val dateOfBirth: String,
-    val city: String,
-    val description: String,
-    val gender: Gender,
-    val videoTitle: String,
-)
 
 @Composable
 private fun ProfileMainScreen(

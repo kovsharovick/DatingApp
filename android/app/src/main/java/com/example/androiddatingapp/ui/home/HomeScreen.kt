@@ -24,6 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,67 +63,103 @@ fun HomeScreen(
     onOpenSubscription: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    loadFeed: suspend () -> Result<List<ProfileUi>>,
+    onSwipe: suspend (userId: Long, like: Boolean) -> Result<Boolean>,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
 ) {
     val feedEnabled = hasVideo && isProfileActive
-    val profiles = remember {
-        listOf(
-            ProfileUi(
-                name = "Анастасия",
-                age = 23,
-                city = "Москва",
-                description = "Люблю прогулки, кофе и хорошие разговоры. Ищу человека с чувством юмора."
-            ),
-            ProfileUi(
-                name = "София",
-                age = 22,
-                city = "Санкт‑Петербург",
-                description = "Дизайнер, обожаю музеи и закаты у Невы. " +
-                    "На выходных часто в теннисе или на концертах. " +
-                    "Хочу познакомиться с тем, кто ценит искренность и не боится спонтанных поездок за город."
-            ),
-            ProfileUi(
-                name = "Мария",
-                age = 25,
-                city = "Казань",
-                description = "Работаю в IT, увлекаюсь йогой."
-            ),
-            ProfileUi(
-                name = "Екатерина",
-                age = 24,
-                city = "Новосибирск",
-                description = "Книги, путешествия и домашние вечера с плейлистом джаза. " +
-                    "Расскажу лучшие места в городе и с удовольствием выслушаю твои истории. " +
-                    "Важно, чтобы было о чём поговорить после первого свайпа."
-            )
-        )
-    }
+    val scope = rememberCoroutineScope()
+
+    var profiles by remember { mutableStateOf<List<ProfileUi>>(emptyList()) }
+    var feedLoading by remember { mutableStateOf(false) }
+    var feedError by remember { mutableStateOf<String?>(null) }
     var currentProfileIndex by remember { mutableIntStateOf(0) }
-    val currentProfile = profiles[currentProfileIndex % profiles.size]
+
+    fun reloadFeed() {
+        scope.launch {
+            feedLoading = true
+            feedError = null
+            loadFeed()
+                .onSuccess { loaded ->
+                    profiles = loaded
+                    currentProfileIndex = 0
+                    if (loaded.isEmpty()) {
+                        feedError = "Лента пуста. Попробуйте позже."
+                    }
+                }
+                .onFailure { feedError = it.message }
+            feedLoading = false
+        }
+    }
+
+    LaunchedEffect(feedEnabled) {
+        if (feedEnabled) reloadFeed() else {
+            profiles = emptyList()
+            feedError = null
+        }
+    }
+
+    val currentProfile = profiles.getOrNull(currentProfileIndex)
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = scaleDp(12f), vertical = scaleDp(10f))
     ) {
-        SwipeableVideoCard(
-            profile = currentProfile,
-            enabled = feedEnabled,
-            canLike = canLike,
-            scaleDp = scaleDp,
-            scaleSp = scaleSp,
-            modifier = Modifier.fillMaxSize(),
-            onDislike = {
-                currentProfileIndex = (currentProfileIndex + 1) % profiles.size
-            },
-            onLike = {
-                onLikeConsumed()
-                currentProfileIndex = (currentProfileIndex + 1) % profiles.size
-            },
-            onLikeLimitReached = onOpenSubscription,
-        )
+        when {
+            feedEnabled && feedLoading -> Text(
+                text = "Загрузка ленты…",
+                color = Color.White.copy(alpha = 0.8f),
+                fontSize = scaleSp(14f),
+                modifier = Modifier.align(Alignment.Center),
+            )
+            feedEnabled && feedError != null -> Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = feedError!!,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = scaleSp(14f),
+                )
+                Spacer(Modifier.height(scaleDp(10f)))
+                Button(onClick = { reloadFeed() }, colors = AppButtonDefaults.blue()) {
+                    Text("Обновить", fontSize = scaleSp(13f), color = Color.White)
+                }
+            }
+            feedEnabled && currentProfile != null -> SwipeableVideoCard(
+                profile = currentProfile,
+                enabled = feedEnabled,
+                canLike = canLike,
+                scaleDp = scaleDp,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxSize(),
+                onDislike = {
+                    scope.launch {
+                        onSwipe(currentProfile.userId, false)
+                            .onSuccess {
+                                currentProfileIndex += 1
+                                if (currentProfileIndex >= profiles.size) reloadFeed()
+                            }
+                            .onFailure { feedError = it.message }
+                    }
+                },
+                onLike = {
+                    scope.launch {
+                        onSwipe(currentProfile.userId, true)
+                            .onSuccess {
+                                onLikeConsumed()
+                                currentProfileIndex += 1
+                                if (currentProfileIndex >= profiles.size) reloadFeed()
+                            }
+                            .onFailure { feedError = it.message }
+                    }
+                },
+                onLikeLimitReached = onOpenSubscription,
+            )
+        }
 
         when {
             !hasVideo -> FeatureBlockOverlay(
