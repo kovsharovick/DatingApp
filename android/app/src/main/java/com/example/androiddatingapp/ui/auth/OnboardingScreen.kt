@@ -14,7 +14,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import com.example.androiddatingapp.ui.theme.AppButtonDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,20 +29,17 @@ import com.example.androiddatingapp.ui.components.launchVideoPicker
 import com.example.androiddatingapp.ui.components.rememberVideoPicker
 import kotlinx.coroutines.launch
 
-private const val DESCRIPTION_MAX_LENGTH = 500
-
 @Composable
 fun OnboardingScreen(
     userName: String,
     hasVideoAlready: Boolean,
     onUploadVideo: suspend (Uri) -> Result<Unit>,
-    onComplete: (description: String) -> Unit,
+    onComplete: () -> Unit,
     onSkip: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier,
 ) {
-    var description by remember { mutableStateOf("") }
     var videoUploaded by remember { mutableStateOf(hasVideoAlready) }
     var uploading by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
@@ -74,29 +70,12 @@ fun OnboardingScreen(
         )
         Spacer(Modifier.height(scaleDp(8f)))
         Text(
-            text = "Расскажите о себе и добавьте видео для анкеты. " +
-                "Без видео лента будет недоступна, чаты останутся открытыми.",
+            text = "Добавьте видео для анкеты. Без видео лента будет недоступна, чаты останутся открытыми. " +
+                "Описание «О себе» можно заполнить позже в профиле.",
             fontSize = scaleSp(14f),
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
         )
         Spacer(Modifier.height(scaleDp(20f)))
-
-        OutlinedTextField(
-            value = description,
-            onValueChange = { if (it.length <= DESCRIPTION_MAX_LENGTH) description = it },
-            label = { Text("О себе", fontSize = scaleSp(12f)) },
-            placeholder = { Text("Необязательно", fontSize = scaleSp(12f)) },
-            supportingText = {
-                Text(
-                    text = "${description.length}/$DESCRIPTION_MAX_LENGTH",
-                    fontSize = scaleSp(11f)
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 3,
-            maxLines = 6
-        )
-        Spacer(Modifier.height(scaleDp(16f)))
 
         Text(
             text = "Видео анкеты",
@@ -144,7 +123,7 @@ fun OnboardingScreen(
 
         Spacer(Modifier.height(scaleDp(24f)))
         Button(
-            onClick = { onComplete(description.trim()) },
+            onClick = onComplete,
             modifier = Modifier.fillMaxWidth(),
             enabled = videoUploaded && !uploading,
             colors = AppButtonDefaults.blue(),

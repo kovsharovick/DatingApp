@@ -20,7 +20,10 @@ object MediaUpload {
 
     fun createImagePart(context: Context, uri: Uri): MultipartBody.Part {
         val file = copyUriToCache(context, uri, "upload_avatar", defaultExtension = ".jpg")
-        val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+        val mimeType = when {
+            uri.scheme == "file" -> "image/jpeg"
+            else -> context.contentResolver.getType(uri) ?: "image/jpeg"
+        }
         val body = file.asRequestBody(mimeType.toMediaTypeOrNull())
         return MultipartBody.Part.createFormData("file", file.name, body)
     }

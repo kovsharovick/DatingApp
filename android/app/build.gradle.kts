@@ -1,7 +1,36 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+fun loadTunnelUrl(key: String, defaultValue: String): String {
+    val fromLocal = run {
+        val file = rootProject.file("local.properties")
+        if (!file.exists()) return@run null
+        val props = Properties()
+        file.inputStream().use { props.load(it) }
+        props.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+    }
+    if (fromLocal != null) return fromLocal
+
+    val fromTunnel = run {
+        val file = rootProject.file("tunnel.properties")
+        if (!file.exists()) return@run null
+        val props = Properties()
+        file.inputStream().use { props.load(it) }
+        props.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+    }
+    return fromTunnel ?: defaultValue
+}
+
+val apiBaseUrl = loadTunnelUrl("api.base.url", "https://thebestapptppbezzpp.loca.lt/")
+    .let { if (it.endsWith("/")) it else "$it/" }
+val minioPublicBaseUrl = loadTunnelUrl(
+    "minio.public.base.url",
+    "https://thebestapptppbezzppminio.loca.lt",
+).trimEnd('/')
 
 android {
     namespace = "com.example.androiddatingapp"
@@ -20,7 +49,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "API_BASE_URL", "\"https://thebestapptppbezzpp.loca.lt/\"")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "MINIO_PUBLIC_BASE_URL", "\"$minioPublicBaseUrl\"")
     }
 
     buildTypes {
@@ -66,9 +96,13 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("com.github.NaikSoftware:StompProtocolAndroid:1.6.6")
+    implementation("io.reactivex.rxjava2:rxjava:2.2.21")
+    implementation("io.reactivex.rxjava2:rxandroid:2.1.1")
     // Media3 — явные координаты, чтобы IDE и Gradle одинаково резолвили зависимости
     implementation("androidx.media3:media3-common:1.5.1")
     implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
     implementation(libs.coil.compose)
     implementation(libs.androidx.exifinterface)

@@ -57,7 +57,7 @@ class DatingRepository(
         when {
             networkError != null -> throw IllegalStateException(
                 "Не удалось связаться с сервером (${BuildConfig.API_BASE_URL}). " +
-                    "Запустите Spring Boot на компьютере.",
+                    "Запустите бэкенд и туннель (start-tunnel.bat).",
                 networkError,
             )
             else -> throw IllegalStateException(
@@ -149,8 +149,13 @@ class DatingRepository(
     }.mapApiError()
 
     suspend fun uploadAvatar(context: Context, uri: Uri): Result<UserProfileResponse> = runCatching {
-        api.uploadAvatar(MediaUpload.createImagePart(context, uri))
-        api.getProfile()
+        val uploaded = api.uploadAvatar(MediaUpload.createImagePart(context, uri))
+        val profile = api.getProfile()
+        if (profile.avatarUrl.isNullOrBlank() && uploaded.avatarUrl.isNotBlank()) {
+            profile.copy(avatarUrl = uploaded.avatarUrl)
+        } else {
+            profile
+        }
     }.mapApiError()
 
     suspend fun deleteAvatar(): Result<UserProfileResponse> = runCatching {
@@ -182,9 +187,9 @@ class DatingRepository(
         city = listOfNotNull(city, region?.takeIf { it.isNotBlank() })
             .joinToString(", "),
         description = description.orEmpty(),
-        videoUrl = videoUrl.orEmpty(),
-        thumbnailUrl = thumbnailUrl.orEmpty(),
-        avatarUrl = avatarUrl.orEmpty(),
+        videoUrl = MediaUrlResolver.resolve(videoUrl),
+        thumbnailUrl = MediaUrlResolver.resolve(thumbnailUrl),
+        avatarUrl = MediaUrlResolver.resolve(avatarUrl),
     )
 
     companion object {
@@ -195,9 +200,9 @@ class DatingRepository(
             city = profile.city,
             description = profile.description.orEmpty(),
             hasVideo = !profile.videoUrl.isNullOrBlank(),
-            videoUrl = profile.videoUrl.orEmpty(),
+            videoUrl = MediaUrlResolver.resolve(profile.videoUrl),
             videoTitle = videoFileLabel(profile.videoUrl),
-            avatarUrl = profile.avatarUrl.orEmpty(),
+            avatarUrl = MediaUrlResolver.resolve(profile.avatarUrl),
             isProfileActive = !profile.hidden,
         )
 

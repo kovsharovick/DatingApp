@@ -12,7 +12,7 @@ object AppImageLoader {
     fun get(context: Context): ImageLoader {
         return instance ?: synchronized(this) {
             instance ?: ImageLoader.Builder(context.applicationContext)
-                .okHttpClient(ApiClient.httpClient)
+                .okHttpClient(ApiClient.mediaHttpClient)
                 .crossfade(true)
                 .build()
                 .also { instance = it }

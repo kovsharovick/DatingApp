@@ -1,0 +1,5 @@
+sdk.dir=C\:\\Users\\YOUR_USER\\AppData\\Local\\Android\\Sdk
+
+# Опционально: переопределить URL туннеля (см. tunnel.properties и start-tunnel*.bat)
+# api.base.url=https://thebestapptppbezzpp.loca.lt/
+# minio.public.base.url=https://thebestapptppbezzppminio.loca.lt

@@ -23,12 +23,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.example.androiddatingapp.data.api.dto.MessageDto
+import com.example.androiddatingapp.data.api.stomp.StompChatClient
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +58,8 @@ fun MessagesScreen(
     currentUserId: Long?,
     loadMatches: suspend () -> Result<List<ChatUi>>,
     loadMessages: suspend (matchId: Long, currentUserId: Long?) -> Result<List<MessageUi>>,
+    stompChatClient: StompChatClient,
+    onIncomingMessage: (matchId: Long, MessageDto) -> MessageUi,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier,
@@ -104,12 +109,38 @@ fun MessagesScreen(
             }
     }
 
+    DisposableEffect(selectedMatchId, currentUserId) {
+        if (selectedMatchId < 0) {
+            onDispose { }
+        } else {
+            val disposable = stompChatClient.subscribeToMatch(selectedMatchId) { dto ->
+                val ui = onIncomingMessage(selectedMatchId, dto)
+                chats = chats.map { chat ->
+                    if (chat.matchId != selectedMatchId) return@map chat
+                    if (chat.messages.any { it.text == ui.text && it.time == ui.time && it.fromMe == ui.fromMe }) {
+                        chat
+                    } else {
+                        chat.copy(
+                            messages = chat.messages + ui,
+                            lastMessage = ui.text,
+                            time = ui.time,
+                        )
+                    }
+                }
+            }
+            onDispose { disposable.dispose() }
+        }
+    }
+
     Box(modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxSize()) {
             when {
                 selectedChat != null -> ChatDetail(
                     chat = selectedChat,
                     onBack = { selectedMatchId = -1L },
+                    onSend = { text ->
+                        stompChatClient.sendMessage(selectedChat.matchId, text)
+                    },
                     scaleDp = scaleDp,
                     scaleSp = scaleSp,
                     modifier = Modifier.fillMaxSize()
@@ -500,6 +531,7 @@ private fun ChatRow(
 private fun ChatDetail(
     chat: ChatUi,
     onBack: () -> Unit,
+    onSend: (String) -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -573,7 +605,13 @@ private fun ChatDetail(
             )
             Spacer(Modifier.width(scaleDp(10f)))
             Button(
-                onClick = { draft = "" },
+                onClick = {
+                    val text = draft.trim()
+                    if (text.isNotEmpty()) {
+                        onSend(text)
+                        draft = ""
+                    }
+                },
                 enabled = draft.isNotBlank()
             ) {
                 Text("Отпр.", fontSize = scaleSp(13f))

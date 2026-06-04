@@ -37,7 +37,7 @@ object ApiClient {
         if (host.endsWith("loca.lt")) {
             chain.proceed(
                 request.newBuilder()
-                    .header("Bypass-Tunnel-Reminder", "true")
+                    .header("bypass-tunnel-reminder", "true")
                     .build(),
             )
         } else {
@@ -45,18 +45,29 @@ object ApiClient {
         }
     }
 
-    val httpClient: OkHttpClient by lazy {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        }
+    private fun baseClientBuilder(): OkHttpClient.Builder =
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
             .addInterceptor(tunnelInterceptor)
+
+    /** API + Retrofit: с JWT. */
+    val httpClient: OkHttpClient by lazy {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+        baseClientBuilder()
             .addInterceptor(authInterceptor)
             .addInterceptor(logging)
             .build()
+    }
+
+    /**
+     * MinIO presigned URL: без Authorization, иначе S3/MinIO может отклонить GET (видео/аватар не грузятся).
+     */
+    val mediaHttpClient: OkHttpClient by lazy {
+        baseClientBuilder().build()
     }
 
     val api: DatingApiService by lazy {
@@ -70,6 +81,14 @@ object ApiClient {
 
     fun parseErrorMessage(throwable: Throwable): String {
         if (throwable !is HttpException) {
+            val msg = throwable.message.orEmpty()
+            if (msg.contains("Unable to resolve host", ignoreCase = true) ||
+                msg.contains("failed to connect", ignoreCase = true) ||
+                msg.contains("timeout", ignoreCase = true)
+            ) {
+                return "Нет связи с сервером (${BuildConfig.API_BASE_URL}). " +
+                    "Запустите бэкенд, start-tunnel.bat и start-tunnel-minio.bat."
+            }
             return throwable.message ?: "Неизвестная ошибка"
         }
         val body = throwable.response()?.errorBody()?.string()

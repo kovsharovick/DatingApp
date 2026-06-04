@@ -23,10 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.androiddatingapp.data.AuthRepository
 import com.example.androiddatingapp.data.DatingRepository
+import com.example.androiddatingapp.data.MediaUrlResolver
+import com.example.androiddatingapp.data.api.stomp.StompChatClient
 import com.example.androiddatingapp.data.DatingRepository.Companion.mergeProfile
 import com.example.androiddatingapp.data.SessionStore
 import com.example.androiddatingapp.data.api.dto.MessageDto
-import com.example.androiddatingapp.data.api.dto.UserUpdateRequestDto
 import com.example.androiddatingapp.ui.auth.LoginScreen
 import com.example.androiddatingapp.ui.auth.OnboardingScreen
 import com.example.androiddatingapp.ui.auth.RegisterScreen
@@ -56,6 +57,7 @@ fun AppRoot(
     val scale = rememberScreenScale(screen)
     val scope = rememberCoroutineScope()
     val datingRepository = remember { DatingRepository() }
+    val stompChatClient = remember { StompChatClient() }
     val authRepository = remember {
         AuthRepository(
             sessionStore = SessionStore(context.applicationContext),
@@ -76,6 +78,7 @@ fun AppRoot(
     }
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var feedRefreshToken by remember { mutableIntStateOf(0) }
     var openProfileSettings by remember { mutableStateOf(false) }
     var openProfileSubscription by remember { mutableStateOf(false) }
 
@@ -99,6 +102,15 @@ fun AppRoot(
         authRepository.restoreSession()
             .onSuccess { account -> session = syncSubscription(account) }
         restoringSession = false
+    }
+
+    LaunchedEffect(session?.authToken) {
+        val token = session?.authToken
+        if (token.isNullOrBlank()) {
+            stompChatClient.disconnect()
+        } else {
+            stompChatClient.connect(token)
+        }
     }
 
     if (showSplash) {
@@ -187,23 +199,12 @@ fun AppRoot(
                             Unit
                         }
                     },
-                    onComplete = { description ->
+                    onComplete = {
                         scope.launch {
                             val user = session ?: return@launch
-                            session = if (description.isNotBlank()) {
-                                datingRepository.updateProfile(
-                                    UserUpdateRequestDto(description = description.trim()),
-                                ).map { profile ->
-                                    user.mergeProfile(profile, user.email).copy(onboardingCompleted = true)
-                                }.getOrElse {
-                                    user.copy(
-                                        description = description.trim(),
-                                        onboardingCompleted = true,
-                                    )
-                                }
-                            } else {
-                                user.copy(onboardingCompleted = true)
-                            }
+                            session = datingRepository.refreshAccount(user.email, user)
+                                .map { refreshed -> refreshed.copy(onboardingCompleted = true) }
+                                .getOrElse { user.copy(onboardingCompleted = true) }
                         }
                     },
                     onSkip = {
@@ -217,6 +218,16 @@ fun AppRoot(
 
             else -> {
                 val user = session!!
+
+                LaunchedEffect(selectedTab, session?.userId) {
+                    val current = session ?: return@LaunchedEffect
+                    when (selectedTab) {
+                        0 -> feedRefreshToken++
+                        2 -> datingRepository.refreshAccount(current.email, current)
+                            .onSuccess { refreshed -> session = syncSubscription(refreshed) }
+                    }
+                }
+
                 val inboxHasUnread = rememberInboxHasUnread(
                     loadMatches = {
                         datingRepository.getMatches().map { matches ->
@@ -242,6 +253,7 @@ fun AppRoot(
                         onOpenProfile = { openProfileTab() },
                         onOpenSettings = { openProfileTab(openSettings = true) },
                         loadFeed = { datingRepository.getFeed() },
+                        feedRefreshToken = feedRefreshToken,
                         onSwipe = { userId, like -> datingRepository.swipe(userId, like) },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
@@ -259,6 +271,8 @@ fun AppRoot(
                                 messages.map { it.toMessageUi(myUserId) }
                             }
                         },
+                        stompChatClient = stompChatClient,
+                        onIncomingMessage = { _, dto -> dto.toMessageUi(user.userId) },
                         scaleDp = scale.dp,
                         scaleSp = scale.sp,
                         modifier = Modifier.weight(1f),
@@ -283,8 +297,9 @@ fun AppRoot(
                             )
                         },
                         onToggleProfileActive = { active ->
-                            datingRepository.setProfileHidden(hidden = !active).map {
-                                user.copy(isProfileActive = active)
+                            val current = session ?: user
+                            datingRepository.setProfileHidden(hidden = !active).map { profile ->
+                                current.mergeProfile(profile, current.email)
                             }
                         },
                         onActivatePremium = {
@@ -293,13 +308,15 @@ fun AppRoot(
                             }
                         },
                         onUploadVideo = { uri ->
+                            val current = session ?: user
                             datingRepository.uploadVideo(context, uri).map { profile ->
-                                user.mergeProfile(profile, user.email)
+                                current.mergeProfile(profile, current.email)
                             }
                         },
                         onUploadAvatar = { uri ->
+                            val current = session ?: user
                             datingRepository.uploadAvatar(context, uri).map { profile ->
-                                user.mergeProfile(profile, user.email)
+                                current.mergeProfile(profile, current.email)
                             }
                         },
                         openSettings = openProfileSettings,
@@ -307,6 +324,7 @@ fun AppRoot(
                         openSubscription = openProfileSubscription,
                         onOpenSubscriptionConsumed = { openProfileSubscription = false },
                         onLogout = {
+                            stompChatClient.disconnect()
                             scope.launch { authRepository.logout() }
                             session = null
                             authMode = AuthMode.Login
@@ -341,7 +359,7 @@ fun AppRoot(
 private fun com.example.androiddatingapp.data.api.dto.MatchDto.toChatUi(): ChatUi = ChatUi(
     matchId = matchId,
     name = partnerName,
-    avatarUrl = partnerAvatarUrl.orEmpty(),
+    avatarUrl = MediaUrlResolver.resolve(partnerAvatarUrl),
     lastMessage = lastMessagePreview.orEmpty(),
     time = DatingRepository.formatDateTime(matchedAt),
     unreadCount = 0,

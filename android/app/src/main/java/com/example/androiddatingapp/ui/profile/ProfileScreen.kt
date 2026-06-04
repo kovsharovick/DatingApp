@@ -51,13 +51,14 @@ import com.example.androiddatingapp.ui.components.DateOfBirthTextField
 import com.example.androiddatingapp.ui.components.ExpandableDescription
 import com.example.androiddatingapp.ui.components.GlowingSubscriptionButton
 import com.example.androiddatingapp.ui.components.PasswordTextField
-import com.example.androiddatingapp.ui.components.VideoPlayerView
 import com.example.androiddatingapp.ui.components.launchImagePicker
 import com.example.androiddatingapp.ui.components.launchVideoPicker
 import com.example.androiddatingapp.ui.components.rememberImagePicker
 import com.example.androiddatingapp.ui.components.rememberVideoPicker
 import com.example.androiddatingapp.ui.components.UserAvatar
 import com.example.androiddatingapp.data.DatingRepository
+import com.example.androiddatingapp.data.MediaUrlResolver
+import com.example.androiddatingapp.ui.components.FeedMediaContent
 import com.example.androiddatingapp.ui.model.Gender
 import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.theme.AppBlue
@@ -90,8 +91,8 @@ private fun UserAccount.toProfileUi(): UserProfileUi = UserProfileUi(
         hasVideo -> "profile_video.mp4"
         else -> ""
     },
-    videoUrl = videoUrl,
-    avatarUrl = avatarUrl,
+    videoUrl = MediaUrlResolver.resolve(videoUrl),
+    avatarUrl = MediaUrlResolver.resolve(avatarUrl),
 )
 
 @Composable
@@ -128,18 +129,11 @@ fun ProfileScreen(
     var pendingAvatarUri by remember { mutableStateOf<Uri?>(null) }
     var localAvatarUri by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(account.avatarUrl) {
-        val remote = account.avatarUrl
-        if (remote.isNotBlank() &&
-            !remote.contains("localhost") &&
-            !remote.contains("127.0.0.1") &&
-            !remote.contains("10.0.2.2")
-        ) {
-            localAvatarUri = null
-        }
+    val displayAvatarUrl = when {
+        localAvatarUri != null -> localAvatarUri!!
+        account.avatarUrl.isNotBlank() -> MediaUrlResolver.resolve(account.avatarUrl)
+        else -> ""
     }
-
-    val displayAvatarUrl = localAvatarUri ?: profile.avatarUrl
 
     val videoPicker = rememberVideoPicker { uri ->
         scope.launch {
@@ -180,8 +174,15 @@ fun ProfileScreen(
                         mediaLoading = true
                         mediaError = null
                         onUploadAvatar(croppedUri)
-                            .onSuccess { saved -> onAccountUpdate(saved) }
-                            .onFailure { mediaError = it.message }
+                            .onSuccess { saved ->
+                                onAccountUpdate(saved)
+                                if (saved.avatarUrl.isNotBlank()) {
+                                    localAvatarUri = null
+                                }
+                            }
+                            .onFailure {
+                                mediaError = it.message
+                            }
                         mediaLoading = false
                     }
                 },
@@ -191,7 +192,8 @@ fun ProfileScreen(
             )
         } else if (showPreview) {
             ProfilePreviewScreen(
-                profile = profile,
+                profile = account.toProfileUi(),
+                canPreview = account.hasVideo || account.videoUrl.isNotBlank(),
                 onBack = { showPreview = false },
                 onChangeVideo = { changeVideoSheetOpen = true },
                 scaleDp = scaleDp,
@@ -425,8 +427,8 @@ private fun ProfileMainScreen(
 
         VideoCard(
             title = "Видео анкета",
-            subtitle = if (hasVideo) profile.videoTitle else "Видео не загружено",
-            hasVideo = hasVideo,
+            subtitle = if (hasVideo || profile.videoUrl.isNotBlank()) profile.videoTitle else "Видео не загружено",
+            hasVideo = hasVideo || profile.videoUrl.isNotBlank(),
             scaleDp = scaleDp,
             scaleSp = scaleSp,
             onPreview = onOpenPreview,
@@ -441,6 +443,7 @@ private fun ProfileMainScreen(
 @Composable
 private fun ProfilePreviewScreen(
     profile: UserProfileUi,
+    canPreview: Boolean,
     onBack: () -> Unit,
     onChangeVideo: () -> Unit,
     scaleDp: (Float) -> Dp,
@@ -481,16 +484,26 @@ private fun ProfilePreviewScreen(
                 .background(DarkCard),
             contentAlignment = Alignment.Center
         ) {
-            if (profile.videoUrl.isNotBlank()) {
-                VideoPlayerView(
-                    videoUrl = profile.videoUrl,
+            if (canPreview && (profile.videoUrl.isNotBlank() || profile.avatarUrl.isNotBlank())) {
+                FeedMediaContent(
+                    profile = com.example.androiddatingapp.ui.model.ProfileUi(
+                        userId = 0L,
+                        name = profile.name,
+                        age = 0,
+                        city = profile.city,
+                        description = profile.description,
+                        videoUrl = profile.videoUrl,
+                        thumbnailUrl = "",
+                        avatarUrl = profile.avatarUrl,
+                    ),
+                    scaleSp = scaleSp,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
                 Text(
                     text = "Видео не загружено",
                     fontSize = scaleSp(14f),
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = Color.White.copy(alpha = 0.9f),
                 )
             }
         }

@@ -115,9 +115,9 @@ class AuthRepository(
             city = city,
             description = description.orEmpty(),
             hasVideo = !videoUrl.isNullOrBlank(),
-            videoUrl = videoUrl.orEmpty(),
+            videoUrl = MediaUrlResolver.resolve(videoUrl),
             videoTitle = DatingRepository.videoFileLabel(videoUrl),
-            avatarUrl = avatarUrl.orEmpty(),
+            avatarUrl = MediaUrlResolver.resolve(avatarUrl),
             isProfileActive = !hidden,
             onboardingCompleted = !videoUrl.isNullOrBlank(),
         )

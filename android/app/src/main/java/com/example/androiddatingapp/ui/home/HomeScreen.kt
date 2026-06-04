@@ -44,8 +44,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.example.androiddatingapp.ui.components.ExpandableDescription
 import com.example.androiddatingapp.ui.components.FeatureBlockOverlay
-import com.example.androiddatingapp.ui.components.VideoPlayerView
+import com.example.androiddatingapp.ui.components.FeedMediaContent
 import com.example.androiddatingapp.ui.model.ProfileUi
+import com.example.androiddatingapp.ui.model.hasVisibleMedia
 import com.example.androiddatingapp.ui.theme.AppBlue
 import com.example.androiddatingapp.ui.theme.AppBlueLight
 import com.example.androiddatingapp.ui.theme.AppButtonDefaults
@@ -65,6 +66,7 @@ fun HomeScreen(
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     loadFeed: suspend () -> Result<List<ProfileUi>>,
+    feedRefreshToken: Int = 0,
     onSwipe: suspend (userId: Long, like: Boolean) -> Result<Boolean>,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
@@ -78,6 +80,10 @@ fun HomeScreen(
     var feedError by remember { mutableStateOf<String?>(null) }
     var currentProfileIndex by remember { mutableIntStateOf(0) }
 
+    val visibleProfiles = remember(profiles) {
+        profiles.filter { it.hasVisibleMedia() }
+    }
+
     fun reloadFeed() {
         scope.launch {
             feedLoading = true
@@ -86,23 +92,22 @@ fun HomeScreen(
                 .onSuccess { loaded ->
                     profiles = loaded
                     currentProfileIndex = 0
-                    if (loaded.isEmpty()) {
-                        feedError = "Лента пуста. Попробуйте позже."
-                    }
                 }
                 .onFailure { feedError = it.message }
             feedLoading = false
         }
     }
 
-    LaunchedEffect(feedEnabled) {
+    LaunchedEffect(feedEnabled, feedRefreshToken) {
         if (feedEnabled) reloadFeed() else {
             profiles = emptyList()
             feedError = null
+            currentProfileIndex = 0
         }
     }
 
-    val currentProfile = profiles.getOrNull(currentProfileIndex)
+    val currentProfile = visibleProfiles.getOrNull(currentProfileIndex)
+    val noVideosToWatch = feedEnabled && !feedLoading && visibleProfiles.isEmpty()
 
     Box(
         modifier = modifier
@@ -116,20 +121,22 @@ fun HomeScreen(
                 fontSize = scaleSp(14f),
                 modifier = Modifier.align(Alignment.Center),
             )
-            feedEnabled && feedError != null -> Column(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = feedError!!,
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = scaleSp(14f),
-                )
-                Spacer(Modifier.height(scaleDp(10f)))
-                Button(onClick = { reloadFeed() }, colors = AppButtonDefaults.blue()) {
-                    Text("Обновить", fontSize = scaleSp(13f), color = Color.White)
-                }
-            }
+            noVideosToWatch -> NoVideosAvailableOverlay(
+                detailMessage = when {
+                    feedError != null -> feedError!!
+                    profiles.isEmpty() ->
+                        "Сервер вернул пустую ленту (часто из‑за ошибки SQL на бэке или фильтров). " +
+                            "Проверьте туннели API и MinIO, затем нажмите «Обновить»."
+                    else ->
+                        "Анкеты пришли без медиа (видео/превью). Запустите start-tunnel-minio.bat " +
+                            "и перезапустите бэкенд с minio.endpoint на туннель."
+                },
+                isRefreshing = feedLoading,
+                onRefresh = { reloadFeed() },
+                scaleDp = scaleDp,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxSize(),
+            )
             feedEnabled && currentProfile != null -> SwipeableVideoCard(
                 profile = currentProfile,
                 enabled = feedEnabled,
@@ -142,7 +149,7 @@ fun HomeScreen(
                         onSwipe(currentProfile.userId, false)
                             .onSuccess {
                                 currentProfileIndex += 1
-                                if (currentProfileIndex >= profiles.size) reloadFeed()
+                                if (currentProfileIndex >= visibleProfiles.size) reloadFeed()
                             }
                             .onFailure { feedError = it.message }
                     }
@@ -153,7 +160,7 @@ fun HomeScreen(
                             .onSuccess {
                                 onLikeConsumed()
                                 currentProfileIndex += 1
-                                if (currentProfileIndex >= profiles.size) reloadFeed()
+                                if (currentProfileIndex >= visibleProfiles.size) reloadFeed()
                             }
                             .onFailure { feedError = it.message }
                     }
@@ -286,21 +293,11 @@ private fun SwipeableVideoCard(
                 }
                 .graphicsLayer { translationX = offsetXPx.value }
         ) {
-            if (profile.videoUrl.isNotBlank()) {
-                VideoPlayerView(
-                    videoUrl = profile.videoUrl,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Text(
-                    text = "Видео недоступно",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = scaleSp(14f),
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(scaleDp(14f)),
-                )
-            }
+            FeedMediaContent(
+                profile = profile,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxSize(),
+            )
 
             ProfileInfoStrip(
                 profile = profile,
@@ -348,6 +345,58 @@ private fun SwipeableVideoCard(
                     .width(edgeWidth)
                     .background(brush)
             )
+        }
+    }
+}
+
+@Composable
+private fun NoVideosAvailableOverlay(
+    detailMessage: String,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    scaleDp: (Float) -> Dp,
+    scaleSp: (Float) -> TextUnit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(scaleDp(18f)))
+            .background(DarkCard),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = scaleDp(24f), vertical = scaleDp(20f))
+                .clip(RoundedCornerShape(scaleDp(18f)))
+                .background(Color.Black.copy(alpha = 0.35f))
+                .padding(scaleDp(18f)),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "Нет доступных видео",
+                fontSize = scaleSp(18f),
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+            )
+            Spacer(Modifier.height(scaleDp(10f)))
+            Text(
+                text = detailMessage,
+                fontSize = scaleSp(13f),
+                color = Color.White.copy(alpha = 0.85f),
+            )
+            Spacer(Modifier.height(scaleDp(16f)))
+            Button(
+                onClick = onRefresh,
+                enabled = !isRefreshing,
+                colors = AppButtonDefaults.blue(),
+                contentPadding = PaddingValues(horizontal = scaleDp(18f), vertical = scaleDp(10f)),
+            ) {
+                Text(
+                    text = if (isRefreshing) "Обновление…" else "Обновить",
+                    fontSize = scaleSp(14f),
+                    color = Color.White,
+                )
+            }
         }
     }
 }
