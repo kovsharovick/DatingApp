@@ -52,11 +52,11 @@ public interface UserSwipeRepository extends JpaRepository<UserSwipe, Long> {
             @Param("direction") String direction);
 
     @Query(value = """
-            SELECT DISTINCT sw.swiper_id
-            FROM user_swipes sw
-            WHERE sw.target_id = :targetId
-              AND sw.direction = CAST(:direction AS public."SWIPE")
-              AND sw.swiper_id IN (:candidateIds)
+            SELECT DISTINCT swiper_id
+            FROM user_swipes
+            WHERE target_id = :targetId
+              AND direction = CAST(:direction AS public."SWIPE")
+              AND swiper_id IN (:candidateIds)
             """, nativeQuery = true)
     Set<Long> findDistinctSwiperIdByTargetIdAndDirectionAndSwiperIdIn(
             @Param("targetId") Long targetId,
