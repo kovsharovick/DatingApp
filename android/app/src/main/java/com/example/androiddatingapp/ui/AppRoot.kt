@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.androiddatingapp.data.AuthRepository
 import com.example.androiddatingapp.data.DatingRepository
+import com.example.androiddatingapp.data.DatingRepository.Companion.mergeProfile
 import com.example.androiddatingapp.data.SessionStore
 import com.example.androiddatingapp.data.api.dto.MessageDto
 import com.example.androiddatingapp.data.api.dto.UserUpdateRequestDto
@@ -163,18 +164,24 @@ fun AppRoot(
                 val user = session!!
                 OnboardingScreen(
                     userName = user.name,
-                    onComplete = { description, videoUploaded ->
+                    hasVideoAlready = user.hasVideo,
+                    onUploadVideo = { uri ->
+                        datingRepository.uploadVideo(context, uri).map { profile ->
+                            session = user.mergeProfile(profile, user.email)
+                                .copy(onboardingCompleted = false)
+                            Unit
+                        }
+                    },
+                    onComplete = { description ->
                         scope.launch {
                             if (description.isNotBlank()) {
                                 datingRepository.updateProfile(
                                     UserUpdateRequestDto(description = description),
                                 )
                             }
-                            session = user.copy(
+                            session = session?.copy(
                                 description = description,
-                                hasVideo = videoUploaded || user.hasVideo,
-                                videoTitle = if (videoUploaded || user.hasVideo) "profile_video" else "",
-                                onboardingCompleted = videoUploaded || user.hasVideo,
+                                onboardingCompleted = true,
                             )
                         }
                     },
@@ -260,8 +267,18 @@ fun AppRoot(
                             }
                         },
                         onActivatePremium = {
-                            datingRepository.activatePremium(30).map {
+                            datingRepository.activatePremium(UserAccount.PRO_DURATION_DAYS).map {
                                 datingRepository.getSubscription().getOrThrow().likesRemaining
+                            }
+                        },
+                        onUploadVideo = { uri ->
+                            datingRepository.uploadVideo(context, uri).map { profile ->
+                                user.mergeProfile(profile, user.email)
+                            }
+                        },
+                        onUploadAvatar = { uri ->
+                            datingRepository.uploadAvatar(context, uri).map { profile ->
+                                user.mergeProfile(profile, user.email)
                             }
                         },
                         openSettings = openProfileSettings,

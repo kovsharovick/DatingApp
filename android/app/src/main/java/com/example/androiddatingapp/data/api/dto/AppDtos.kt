@@ -80,3 +80,20 @@ data class ReportRequestDto(
 data class PremiumActivationDto(
     val message: String,
 )
+
+data class VideoUploadResponseDto(
+    val videoId: Long? = null,
+    val videoUrl: String? = null,
+)
+
+data class VideoResponseDto(
+    val id: Long,
+    val videoUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val durationSec: Int? = null,
+    val active: Boolean = false,
+)
+
+data class AvatarUploadResponseDto(
+    val avatarUrl: String,
+)

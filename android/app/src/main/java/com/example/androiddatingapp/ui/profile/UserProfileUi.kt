@@ -9,4 +9,6 @@ data class UserProfileUi(
     val description: String,
     val gender: Gender,
     val videoTitle: String,
+    val videoUrl: String = "",
+    val avatarUrl: String = "",
 )

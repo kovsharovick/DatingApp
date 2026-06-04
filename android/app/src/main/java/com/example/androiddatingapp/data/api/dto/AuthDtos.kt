@@ -29,6 +29,8 @@ data class UserProfileResponse(
     val region: String? = null,
     val description: String? = null,
     val videoUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val avatarUrl: String? = null,
     val hidden: Boolean = false,
 )
 

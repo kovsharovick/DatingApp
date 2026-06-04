@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.theme.AppRed
 import com.example.androiddatingapp.ui.theme.AppRedDark
 import com.example.androiddatingapp.ui.theme.AppRedLight
@@ -62,6 +63,7 @@ fun GlowingSubscriptionButton(
 
     val shape = RoundedCornerShape(scaleDp(18f))
     val glowAlpha = 0.22f + 0.38f * glowPulse
+    val price = UserAccount.PRO_PRICE_RUB
 
     Box(
         modifier = modifier
@@ -105,7 +107,7 @@ fun GlowingSubscriptionButton(
     ) {
         Column {
             Text(
-                text = "🔥 Подписка на лайки",
+                text = "⭐ Подключить Pro · $price ₽",
                 fontSize = scaleSp(16f),
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -113,9 +115,9 @@ fun GlowingSubscriptionButton(
             Spacer(Modifier.height(scaleDp(4f)))
             Text(
                 text = if (remainingLikes > 0) {
-                    "Осталось $remainingLikes лайков · купить ещё"
+                    "Осталось $remainingLikes лайков · до 100 лайков в день с Pro"
                 } else {
-                    "Лайки закончились · купить 10, 20 или 50"
+                    "Лайки закончились · подключите Pro за $price ₽"
                 },
                 fontSize = scaleSp(12f),
                 color = Color.White.copy(alpha = 0.9f),

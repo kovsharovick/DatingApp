@@ -1,5 +1,6 @@
 package com.example.androiddatingapp.ui.auth
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import com.example.androiddatingapp.ui.theme.AppButtonDefaults
@@ -18,25 +20,45 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import com.example.androiddatingapp.ui.components.launchVideoPicker
+import com.example.androiddatingapp.ui.components.rememberVideoPicker
+import kotlinx.coroutines.launch
 
 private const val DESCRIPTION_MAX_LENGTH = 500
 
 @Composable
 fun OnboardingScreen(
     userName: String,
-    onComplete: (description: String, videoUploaded: Boolean) -> Unit,
+    hasVideoAlready: Boolean,
+    onUploadVideo: suspend (Uri) -> Result<Unit>,
+    onComplete: (description: String) -> Unit,
     onSkip: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier,
 ) {
     var description by remember { mutableStateOf("") }
-    var videoUploaded by remember { mutableStateOf(false) }
+    var videoUploaded by remember { mutableStateOf(hasVideoAlready) }
+    var uploading by remember { mutableStateOf(false) }
+    var uploadError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    val videoPicker = rememberVideoPicker { uri ->
+        scope.launch {
+            uploading = true
+            uploadError = null
+            onUploadVideo(uri)
+                .onSuccess { videoUploaded = true }
+                .onFailure { uploadError = it.message }
+            uploading = false
+        }
+    }
 
     Column(
         modifier = modifier
@@ -84,31 +106,47 @@ fun OnboardingScreen(
         )
         Spacer(Modifier.height(scaleDp(8f)))
         Text(
-            text = if (videoUploaded) {
-                "Видео добавлено (заглушка)"
-            } else {
-                "Загрузите короткое видео — так вас увидят в ленте"
+            text = when {
+                uploading -> "Загрузка видео…"
+                videoUploaded -> "Видео загружено на сервер"
+                else -> "Выберите короткое видео с телефона — так вас увидят в ленте"
             },
             fontSize = scaleSp(13f),
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
+        if (uploadError != null) {
+            Spacer(Modifier.height(scaleDp(6f)))
+            Text(
+                text = uploadError!!,
+                fontSize = scaleSp(12f),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Spacer(Modifier.height(scaleDp(10f)))
         OutlinedButton(
-            onClick = { videoUploaded = true },
+            onClick = { launchVideoPicker(videoPicker) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !videoUploaded,
+            enabled = !uploading && !videoUploaded,
             colors = AppButtonDefaults.outlinedBlue(),
         ) {
-            Text(
-                text = if (videoUploaded) "Видео загружено" else "Загрузить видео",
-                fontSize = scaleSp(14f)
-            )
+            if (uploading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.height(scaleDp(18f)),
+                    strokeWidth = scaleDp(2f),
+                )
+            } else {
+                Text(
+                    text = if (videoUploaded) "Видео загружено" else "Выбрать видео с телефона",
+                    fontSize = scaleSp(14f)
+                )
+            }
         }
 
         Spacer(Modifier.height(scaleDp(24f)))
         Button(
-            onClick = { onComplete(description.trim(), videoUploaded) },
+            onClick = { onComplete(description.trim()) },
             modifier = Modifier.fillMaxWidth(),
+            enabled = videoUploaded && !uploading,
             colors = AppButtonDefaults.blue(),
         ) {
             Text("Готово", fontSize = scaleSp(14f))

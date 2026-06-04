@@ -30,13 +30,30 @@ object ApiClient {
         chain.proceed(requestBuilder.build())
     }
 
+    /** localtunnel (loca.lt) показывает interstitial без этого заголовка. */
+    private val tunnelInterceptor = Interceptor { chain ->
+        val request = chain.request()
+        val host = request.url.host
+        if (host.endsWith("loca.lt")) {
+            chain.proceed(
+                request.newBuilder()
+                    .header("Bypass-Tunnel-Reminder", "true")
+                    .build(),
+            )
+        } else {
+            chain.proceed(request)
+        }
+    }
+
     private val httpClient: OkHttpClient by lazy {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .addInterceptor(tunnelInterceptor)
             .addInterceptor(authInterceptor)
             .addInterceptor(logging)
             .build()

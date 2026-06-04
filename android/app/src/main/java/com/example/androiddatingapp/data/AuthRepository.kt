@@ -110,7 +110,9 @@ class AuthRepository(
             city = city,
             description = description.orEmpty(),
             hasVideo = !videoUrl.isNullOrBlank(),
-            videoTitle = if (!videoUrl.isNullOrBlank()) "profile_video" else "",
+            videoUrl = videoUrl.orEmpty(),
+            videoTitle = DatingRepository.videoFileLabel(videoUrl),
+            avatarUrl = avatarUrl.orEmpty(),
             isProfileActive = !hidden,
             onboardingCompleted = !videoUrl.isNullOrBlank(),
         )

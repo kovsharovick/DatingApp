@@ -6,4 +6,7 @@ data class ProfileUi(
     val age: Int,
     val city: String,
     val description: String = "",
+    val videoUrl: String = "",
+    val thumbnailUrl: String = "",
+    val avatarUrl: String = "",
 )

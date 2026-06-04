@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.example.androiddatingapp.ui.components.ExpandableDescription
 import com.example.androiddatingapp.ui.components.FeatureBlockOverlay
+import com.example.androiddatingapp.ui.components.VideoPlayerView
 import com.example.androiddatingapp.ui.model.ProfileUi
 import com.example.androiddatingapp.ui.theme.AppBlue
 import com.example.androiddatingapp.ui.theme.AppBlueLight
@@ -285,13 +286,21 @@ private fun SwipeableVideoCard(
                 }
                 .graphicsLayer { translationX = offsetXPx.value }
         ) {
-            // Видео (заглушка)
-            Text(
-                text = "Видео анкета (заглушка)",
-                color = Color.White,
-                fontSize = scaleSp(14f),
-                modifier = Modifier.padding(scaleDp(14f))
-            )
+            if (profile.videoUrl.isNotBlank()) {
+                VideoPlayerView(
+                    videoUrl = profile.videoUrl,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = "Видео недоступно",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = scaleSp(14f),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(scaleDp(14f)),
+                )
+            }
 
             ProfileInfoStrip(
                 profile = profile,

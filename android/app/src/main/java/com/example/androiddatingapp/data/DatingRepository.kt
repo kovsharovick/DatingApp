@@ -1,6 +1,7 @@
 package com.example.androiddatingapp.data
 
 import android.content.Context
+import android.net.Uri
 import com.example.androiddatingapp.BuildConfig
 import com.example.androiddatingapp.data.api.ApiClient
 import com.example.androiddatingapp.data.api.DatingApiService
@@ -142,6 +143,25 @@ class DatingRepository(
         api.activatePremium(days).message
     }.mapApiError()
 
+    suspend fun uploadVideo(context: Context, uri: Uri): Result<UserProfileResponse> = runCatching {
+        api.uploadVideo(MediaUpload.createVideoPart(context, uri))
+        api.getProfile()
+    }.mapApiError()
+
+    suspend fun uploadAvatar(context: Context, uri: Uri): Result<UserProfileResponse> = runCatching {
+        api.uploadAvatar(MediaUpload.createImagePart(context, uri))
+        api.getProfile()
+    }.mapApiError()
+
+    suspend fun deleteAvatar(): Result<UserProfileResponse> = runCatching {
+        api.deleteAvatar()
+        api.getProfile()
+    }.mapApiError()
+
+    suspend fun refreshAccount(email: String, account: UserAccount): Result<UserAccount> = runCatching {
+        account.mergeProfile(api.getProfile(), email)
+    }.mapApiError()
+
     suspend fun blockUser(userId: Long): Result<Unit> = runCatching {
         api.blockUser(com.example.androiddatingapp.data.api.dto.BlockRequestDto(userId))
     }.mapApiError()
@@ -162,6 +182,9 @@ class DatingRepository(
         city = listOfNotNull(city, region?.takeIf { it.isNotBlank() })
             .joinToString(", "),
         description = description.orEmpty(),
+        videoUrl = videoUrl.orEmpty(),
+        thumbnailUrl = thumbnailUrl.orEmpty(),
+        avatarUrl = avatarUrl.orEmpty(),
     )
 
     companion object {
@@ -172,9 +195,25 @@ class DatingRepository(
             city = profile.city,
             description = profile.description.orEmpty(),
             hasVideo = !profile.videoUrl.isNullOrBlank(),
-            videoTitle = if (!profile.videoUrl.isNullOrBlank()) "profile_video" else "",
+            videoUrl = profile.videoUrl.orEmpty(),
+            videoTitle = videoFileLabel(profile.videoUrl),
+            avatarUrl = profile.avatarUrl.orEmpty(),
             isProfileActive = !profile.hidden,
         )
+
+        fun matchesToNotifications(matches: List<MatchDto>): List<MatchNotification> =
+            matches.map { match ->
+                MatchNotification(
+                    id = "match_${match.matchId}",
+                    title = "Совпадение",
+                    body = "У вас совпадение с ${match.partnerName}",
+                    time = formatDateTime(match.matchedAt),
+                    matchId = match.matchId,
+                )
+            }
+
+        internal fun videoFileLabel(videoUrl: String?): String =
+            if (videoUrl.isNullOrBlank()) "" else "profile_video.mp4"
 
         fun formatDateTime(iso: String?): String {
             if (iso.isNullOrBlank()) return ""
@@ -205,6 +244,14 @@ class DatingRepository(
         }
     }
 }
+
+data class MatchNotification(
+    val id: String,
+    val title: String,
+    val body: String,
+    val time: String,
+    val matchId: Long,
+)
 
 private fun <T> Result<T>.mapApiError(): Result<T> =
     exceptionOrNull()?.let { Result.failure(Exception(ApiClient.parseErrorMessage(it))) }

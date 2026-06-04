@@ -1,5 +1,6 @@
 package com.example.androiddatingapp.ui.profile
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,16 +38,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.example.androiddatingapp.ui.components.CityAutocompleteField
+import com.example.androiddatingapp.ui.components.AvatarCropScreen
 import com.example.androiddatingapp.ui.components.DateOfBirthTextField
 import com.example.androiddatingapp.ui.components.ExpandableDescription
 import com.example.androiddatingapp.ui.components.GlowingSubscriptionButton
 import com.example.androiddatingapp.ui.components.PasswordTextField
+import com.example.androiddatingapp.ui.components.VideoPlayerView
+import com.example.androiddatingapp.ui.components.launchImagePicker
+import com.example.androiddatingapp.ui.components.launchVideoPicker
+import com.example.androiddatingapp.ui.components.rememberImagePicker
+import com.example.androiddatingapp.ui.components.rememberVideoPicker
+import coil.compose.AsyncImage
 import com.example.androiddatingapp.data.DatingRepository
 import com.example.androiddatingapp.ui.model.Gender
 import com.example.androiddatingapp.ui.model.UserAccount
@@ -78,9 +86,11 @@ private fun UserAccount.toProfileUi(): UserProfileUi = UserProfileUi(
     gender = gender,
     videoTitle = when {
         videoTitle.isNotBlank() -> videoTitle
-        hasVideo -> "video_profile.mp4"
+        hasVideo -> "profile_video.mp4"
         else -> ""
     },
+    videoUrl = videoUrl,
+    avatarUrl = avatarUrl,
 )
 
 @Composable
@@ -95,6 +105,8 @@ fun ProfileScreen(
     onSaveProfile: suspend (UserProfileUi) -> Result<UserAccount>,
     onToggleProfileActive: suspend (Boolean) -> Result<UserAccount>,
     onActivatePremium: suspend () -> Result<Int>,
+    onUploadVideo: suspend (Uri) -> Result<UserAccount>,
+    onUploadAvatar: suspend (Uri) -> Result<UserAccount>,
     onLogout: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
@@ -110,7 +122,27 @@ fun ProfileScreen(
     var changePasswordOpen by remember { mutableStateOf(false) }
     var subscriptionSheetOpen by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
-    var videoVersion by remember { mutableIntStateOf(1) }
+    var mediaError by remember { mutableStateOf<String?>(null) }
+    var mediaLoading by remember { mutableStateOf(false) }
+    var pendingAvatarUri by remember { mutableStateOf<Uri?>(null) }
+
+    val videoPicker = rememberVideoPicker { uri ->
+        scope.launch {
+            mediaLoading = true
+            mediaError = null
+            onUploadVideo(uri)
+                .onSuccess { saved ->
+                    onAccountUpdate(saved)
+                    changeVideoSheetOpen = false
+                }
+                .onFailure { mediaError = it.message }
+            mediaLoading = false
+        }
+    }
+
+    val avatarPicker = rememberImagePicker { uri ->
+        pendingAvatarUri = uri
+    }
 
     if (openSettings) {
         settingsSheetOpen = true
@@ -122,7 +154,26 @@ fun ProfileScreen(
     }
 
     Surface(modifier.fillMaxSize()) {
-        if (showPreview) {
+        if (pendingAvatarUri != null) {
+            AvatarCropScreen(
+                imageUri = pendingAvatarUri!!,
+                onDismiss = { pendingAvatarUri = null },
+                onConfirm = { croppedUri ->
+                    pendingAvatarUri = null
+                    scope.launch {
+                        mediaLoading = true
+                        mediaError = null
+                        onUploadAvatar(croppedUri)
+                            .onSuccess { saved -> onAccountUpdate(saved) }
+                            .onFailure { mediaError = it.message }
+                        mediaLoading = false
+                    }
+                },
+                scaleDp = scaleDp,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (showPreview) {
             ProfilePreviewScreen(
                 profile = profile,
                 onBack = { showPreview = false },
@@ -137,9 +188,12 @@ fun ProfileScreen(
                 cityAgeLine = profileCityAgeLine(account.city, account.ageYears()),
                 hasVideo = account.hasVideo,
                 remainingLikes = account.remainingLikes(),
+                mediaLoading = mediaLoading,
+                mediaError = mediaError,
                 onOpenSubscription = { subscriptionSheetOpen = true },
                 onOpenPreview = { showPreview = true },
                 onUploadVideo = { changeVideoSheetOpen = true },
+                onChangeAvatar = { launchImagePicker(avatarPicker) },
                 onOpenEdit = { editSheetOpen = true },
                 onOpenSettings = { settingsSheetOpen = true },
                 scaleDp = scaleDp,
@@ -193,22 +247,10 @@ fun ProfileScreen(
         ChangeVideoSheet(
             currentVideoTitle = profile.videoTitle,
             hasVideo = account.hasVideo,
+            uploading = mediaLoading,
+            uploadError = mediaError,
             onDismiss = { changeVideoSheetOpen = false },
-            onUploadNewVideo = {
-                videoVersion += 1
-                onAccountUpdate(
-                    account.copy(
-                        hasVideo = true,
-                        videoTitle = "video_profile_v$videoVersion.mp4",
-                    )
-                )
-                changeVideoSheetOpen = false
-            },
-            onDeleteVideo = {
-                onAccountUpdate(account.copy(hasVideo = false, videoTitle = ""))
-                changeVideoSheetOpen = false
-                showPreview = false
-            },
+            onPickVideo = { launchVideoPicker(videoPicker) },
             scaleDp = scaleDp,
             scaleSp = scaleSp
         )
@@ -226,7 +268,7 @@ fun ProfileScreen(
         SwipeSubscriptionSheet(
             remainingLikes = account.remainingLikes(),
             onDismiss = { subscriptionSheetOpen = false },
-            onPurchase = { _ ->
+            onPurchasePro = {
                 scope.launch {
                     profileError = null
                     onActivatePremium()
@@ -251,9 +293,12 @@ private fun ProfileMainScreen(
     cityAgeLine: String,
     hasVideo: Boolean,
     remainingLikes: Int,
+    mediaLoading: Boolean,
+    mediaError: String?,
     onOpenSubscription: () -> Unit,
     onOpenPreview: () -> Unit,
     onUploadVideo: () -> Unit,
+    onChangeAvatar: () -> Unit,
     onOpenEdit: () -> Unit,
     onOpenSettings: () -> Unit,
     scaleDp: (Float) -> Dp,
@@ -288,6 +333,8 @@ private fun ProfileMainScreen(
             GenderAvatar(
                 name = profile.name,
                 gender = profile.gender,
+                avatarUrl = profile.avatarUrl,
+                onClick = onChangeAvatar,
                 size = scaleDp(68f),
                 scaleSp = scaleSp
             )
@@ -329,6 +376,15 @@ private fun ProfileMainScreen(
         }
 
         Spacer(Modifier.height(scaleDp(12f)))
+
+        if (mediaError != null) {
+            Text(
+                text = mediaError,
+                fontSize = scaleSp(12f),
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(scaleDp(8f)))
+        }
 
         GlowingSubscriptionButton(
             remainingLikes = remainingLikes,
@@ -407,11 +463,18 @@ private fun ProfilePreviewScreen(
                 .background(DarkCard),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "Видео: ${profile.videoTitle}",
-                fontSize = scaleSp(14f),
-                color = Color.White.copy(alpha = 0.9f)
-            )
+            if (profile.videoUrl.isNotBlank()) {
+                VideoPlayerView(
+                    videoUrl = profile.videoUrl,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = "Видео не загружено",
+                    fontSize = scaleSp(14f),
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+            }
         }
 
         Spacer(Modifier.height(scaleDp(12f)))
@@ -468,6 +531,8 @@ private fun DescriptionCard(
 private fun GenderAvatar(
     name: String,
     gender: Gender,
+    avatarUrl: String,
+    onClick: () -> Unit,
     size: Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -481,15 +546,25 @@ private fun GenderAvatar(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(bg),
+            .background(bg)
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = name.trim().take(1).uppercase(),
-            fontSize = scaleSp(22f),
-            fontWeight = FontWeight.Bold,
-            color = letterColor
-        )
+        if (avatarUrl.isNotBlank()) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "Фото профиля",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Text(
+                text = name.trim().take(1).uppercase(),
+                fontSize = scaleSp(22f),
+                fontWeight = FontWeight.Bold,
+                color = letterColor
+            )
+        }
     }
 }
 
@@ -784,9 +859,10 @@ private fun SettingsSheet(
 private fun ChangeVideoSheet(
     currentVideoTitle: String,
     hasVideo: Boolean,
+    uploading: Boolean,
+    uploadError: String?,
     onDismiss: () -> Unit,
-    onUploadNewVideo: () -> Unit,
-    onDeleteVideo: () -> Unit,
+    onPickVideo: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
 ) {
@@ -818,26 +894,29 @@ private fun ChangeVideoSheet(
             )
             Spacer(Modifier.height(scaleDp(14f)))
 
+            if (uploadError != null) {
+                Text(
+                    text = uploadError,
+                    fontSize = scaleSp(12f),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(scaleDp(10f)))
+            }
+
             Button(
-                onClick = onUploadNewVideo,
+                onClick = onPickVideo,
                 modifier = Modifier.fillMaxWidth(),
+                enabled = !uploading,
                 colors = AppButtonDefaults.blue(),
             ) {
                 Text(
-                    text = if (hasVideo) "Загрузить новое видео" else "Загрузить видео",
+                    text = when {
+                        uploading -> "Загрузка…"
+                        hasVideo -> "Выбрать новое видео"
+                        else -> "Выбрать видео с телефона"
+                    },
                     fontSize = scaleSp(13f)
                 )
-            }
-
-            if (hasVideo) {
-                Spacer(Modifier.height(scaleDp(10f)))
-                OutlinedButton(
-                    onClick = onDeleteVideo,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = AppButtonDefaults.outlinedRed(),
-                ) {
-                    Text(text = "Удалить видео", fontSize = scaleSp(13f))
-                }
             }
 
             Spacer(Modifier.height(scaleDp(18f)))
@@ -845,23 +924,18 @@ private fun ChangeVideoSheet(
     }
 }
 
-private fun likePackPrice(likes: Int): String = when (likes) {
-    10 -> "149 ₽"
-    20 -> "249 ₽"
-    50 -> "499 ₽"
-    else -> ""
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeSubscriptionSheet(
     remainingLikes: Int,
     onDismiss: () -> Unit,
-    onPurchase: (Int) -> Unit,
+    onPurchasePro: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val price = UserAccount.PRO_PRICE_RUB
+    val days = UserAccount.PRO_DURATION_DAYS
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -874,41 +948,65 @@ private fun SwipeSubscriptionSheet(
                 .padding(horizontal = scaleDp(14f), vertical = scaleDp(10f)),
         ) {
             Text(
-                text = "Дополнительные лайки",
-                fontSize = scaleSp(16f),
-                fontWeight = FontWeight.SemiBold,
+                text = "Подписка Pro",
+                fontSize = scaleSp(20f),
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(scaleDp(6f)))
+            Spacer(Modifier.height(scaleDp(8f)))
             Text(
-                text = "Каждый день — ${UserAccount.DAILY_FREE_LIKES} бесплатных лайков. " +
-                    "Дизлайки без ограничений. Сейчас доступно: $remainingLikes.",
-                fontSize = scaleSp(12f),
+                text = "Бесплатно — ${UserAccount.DAILY_FREE_LIKES} лайков в день. " +
+                    "Сейчас доступно: $remainingLikes.",
+                fontSize = scaleSp(13f),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
             )
             Spacer(Modifier.height(scaleDp(14f)))
 
-            UserAccount.LIKE_PACK_OPTIONS.forEach { pack ->
-                val price = likePackPrice(pack)
-                Button(
-                    onClick = { onPurchase(pack) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = AppButtonDefaults.red(),
-                ) {
-                    Text(
-                        text = "+$pack лайков · $price",
-                        fontSize = scaleSp(14f),
-                    )
-                }
-                Spacer(Modifier.height(scaleDp(10f)))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(scaleDp(16f)))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .padding(scaleDp(14f)),
+            ) {
+                Text(
+                    text = "Pro · $price ₽ / $days дней",
+                    fontSize = scaleSp(17f),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(scaleDp(8f)))
+                Text(
+                    text = "• До 100 лайков каждый день\n" +
+                        "• Дизлайки без ограничений\n" +
+                        "• Приоритет в ленте",
+                    fontSize = scaleSp(13f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                )
             }
+
+            Spacer(Modifier.height(scaleDp(16f)))
+
+            Button(
+                onClick = onPurchasePro,
+                modifier = Modifier.fillMaxWidth(),
+                colors = AppButtonDefaults.red(),
+            ) {
+                Text(
+                    text = "Подключить Pro за $price ₽",
+                    fontSize = scaleSp(15f),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            Spacer(Modifier.height(scaleDp(10f)))
 
             OutlinedButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
                 colors = AppButtonDefaults.outlinedBlue(),
             ) {
-                Text(text = "Закрыть", fontSize = scaleSp(13f))
+                Text(text = "Не сейчас", fontSize = scaleSp(13f))
             }
 
             Spacer(Modifier.height(scaleDp(18f)))

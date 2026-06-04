@@ -58,7 +58,8 @@ fun MessagesScreen(
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier,
 ) {
-    val notifications = remember { demoNotifications() }
+    var notifications by remember { mutableStateOf<List<NotificationUi>>(emptyList()) }
+    var readNotificationIds by remember { mutableStateOf(setOf<String>()) }
 
     var chats by remember { mutableStateOf<List<ChatUi>>(emptyList()) }
     var chatsLoading by remember { mutableStateOf(true) }
@@ -68,7 +69,18 @@ fun MessagesScreen(
         chatsLoading = true
         chatsError = null
         loadMatches()
-            .onSuccess { chats = it }
+            .onSuccess { loaded ->
+                chats = loaded
+                notifications = loaded.map { chat ->
+                    NotificationUi(
+                        id = "match_${chat.matchId}",
+                        title = "Совпадение",
+                        body = "У вас совпадение с ${chat.name}",
+                        time = chat.time,
+                        isRead = readNotificationIds.contains("match_${chat.matchId}"),
+                    )
+                }
+            }
             .onFailure { chatsError = it.message }
         chatsLoading = false
     }
@@ -113,7 +125,14 @@ fun MessagesScreen(
                     chats = chats,
                     chatsLoading = chatsLoading,
                     chatsError = chatsError,
-                    onOpenNotifications = { showNotifications = true },
+                    onOpenNotifications = {
+                        readNotificationIds = readNotificationIds + notifications
+                            .filter { !it.isRead }
+                            .map { it.id }
+                            .toSet()
+                        notifications = notifications.map { it.copy(isRead = true) }
+                        showNotifications = true
+                    },
                     onOpenChat = { selectedMatchId = it },
                     scaleDp = scaleDp,
                     scaleSp = scaleSp,
@@ -129,31 +148,7 @@ private data class NotificationUi(
     val title: String,
     val body: String,
     val time: String,
-    val isRead: Boolean
-)
-
-private fun demoNotifications() = listOf(
-    NotificationUi(
-        id = "n1",
-        title = "Новый лайк",
-        body = "Анна поставила вам лайк",
-        time = "Сегодня",
-        isRead = false
-    ),
-    NotificationUi(
-        id = "n2",
-        title = "Совпадение",
-        body = "У вас новое совпадение с Марией",
-        time = "Вчера",
-        isRead = true
-    ),
-    NotificationUi(
-        id = "n3",
-        title = "Просмотр профиля",
-        body = "Екатерина посмотрела вашу анкету",
-        time = "Пн",
-        isRead = false
-    )
+    val isRead: Boolean,
 )
 
 @Composable
@@ -335,6 +330,16 @@ private fun NotificationsList(
             modifier = modifier,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = scaleDp(12f))
         ) {
+            if (notifications.isEmpty()) {
+                item(key = "empty_notifications") {
+                    Text(
+                        text = "Пока нет уведомлений о совпадениях.",
+                        fontSize = scaleSp(14f),
+                        modifier = Modifier.padding(scaleDp(16f)),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    )
+                }
+            }
             items(notifications, key = { it.id }) { notification ->
                 NotificationRow(
                     notification = notification,
