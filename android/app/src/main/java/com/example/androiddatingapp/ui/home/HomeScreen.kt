@@ -65,8 +65,13 @@ fun HomeScreen(
     onOpenSubscription: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenPreferences: () -> Unit = {},
     loadFeed: suspend () -> Result<List<ProfileUi>>,
     feedRefreshToken: Int = 0,
+    swipedUserIds: Set<Long> = emptySet(),
+    onUserSwiped: (Long) -> Unit = {},
+    onUserUnswiped: (Long) -> Unit = {},
+    hasActivePremium: Boolean = false,
     onSwipe: suspend (userId: Long, like: Boolean) -> Result<Boolean>,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
@@ -75,13 +80,36 @@ fun HomeScreen(
     val feedEnabled = hasVideo && isProfileActive
     val scope = rememberCoroutineScope()
 
-    var profiles by remember { mutableStateOf<List<ProfileUi>>(emptyList()) }
+    var rawFeed by remember { mutableStateOf<List<ProfileUi>>(emptyList()) }
     var feedLoading by remember { mutableStateOf(false) }
     var feedError by remember { mutableStateOf<String?>(null) }
     var currentProfileIndex by remember { mutableIntStateOf(0) }
 
-    val visibleProfiles = remember(profiles) {
-        profiles.filter { it.hasVisibleMedia() }
+    val displayFeed = remember(rawFeed, swipedUserIds) {
+        rawFeed.forFeedDisplay(swipedUserIds)
+    }
+
+    val visibleProfiles = remember(displayFeed) {
+        displayFeed.filter { it.hasVisibleMedia() }
+    }
+
+    fun applyLoadedFeed(loaded: List<ProfileUi>) {
+        rawFeed = loaded
+        currentProfileIndex = 0
+    }
+
+    fun markUserReacted(userId: Long) {
+        onUserSwiped(userId)
+    }
+
+    fun unmarkUserReacted(userId: Long) {
+        onUserUnswiped(userId)
+    }
+
+    fun adjustIndexAfterRemoval() {
+        if (currentProfileIndex >= visibleProfiles.size) {
+            currentProfileIndex = 0
+        }
     }
 
     fun reloadFeed() {
@@ -89,10 +117,7 @@ fun HomeScreen(
             feedLoading = true
             feedError = null
             loadFeed()
-                .onSuccess { loaded ->
-                    profiles = loaded
-                    currentProfileIndex = 0
-                }
+                .onSuccess { loaded -> applyLoadedFeed(loaded) }
                 .onFailure { feedError = it.message }
             feedLoading = false
         }
@@ -100,10 +125,14 @@ fun HomeScreen(
 
     LaunchedEffect(feedEnabled, feedRefreshToken) {
         if (feedEnabled) reloadFeed() else {
-            profiles = emptyList()
+            rawFeed = emptyList()
             feedError = null
             currentProfileIndex = 0
         }
+    }
+
+    LaunchedEffect(swipedUserIds) {
+        adjustIndexAfterRemoval()
     }
 
     val currentProfile = visibleProfiles.getOrNull(currentProfileIndex)
@@ -122,15 +151,20 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
             noVideosToWatch -> NoVideosAvailableOverlay(
+                title = if (feedError == null && displayFeed.isEmpty()) {
+                    "Доступных анкет пока нет"
+                } else {
+                    "Нет доступных видео"
+                },
                 detailMessage = when {
                     feedError != null -> feedError!!
-                    profiles.isEmpty() ->
-                        "Сервер вернул пустую ленту (часто из‑за ошибки SQL на бэке или фильтров). " +
-                            "Проверьте туннели API и MinIO, затем нажмите «Обновить»."
+                    displayFeed.isEmpty() ->
+                        "По вашим предпочтениям сейчас никого нет. Расширьте возраст, расстояние или выбор пола."
                     else ->
-                        "Анкеты пришли без медиа (видео/превью). Запустите start-tunnel-minio.bat " +
-                            "и перезапустите бэкенд с minio.endpoint на туннель."
+                        "Новые анкеты без медиа. Попробуйте обновить ленту позже."
                 },
+                showPreferencesAction = feedError == null && displayFeed.isEmpty(),
+                onOpenPreferences = onOpenPreferences,
                 isRefreshing = feedLoading,
                 onRefresh = { reloadFeed() },
                 scaleDp = scaleDp,
@@ -146,26 +180,30 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
                 onDislike = {
                     scope.launch {
-                        onSwipe(currentProfile.userId, false)
-                            .onSuccess {
-                                currentProfileIndex += 1
-                                if (currentProfileIndex >= visibleProfiles.size) reloadFeed()
+                        val userId = currentProfile.userId
+                        markUserReacted(userId)
+                        onSwipe(userId, false)
+                            .onFailure { e ->
+                                if (!e.isAlreadySwipedError()) unmarkUserReacted(userId)
+                                feedError = e.message
                             }
-                            .onFailure { feedError = it.message }
                     }
                 },
                 onLike = {
                     scope.launch {
-                        onSwipe(currentProfile.userId, true)
-                            .onSuccess {
-                                onLikeConsumed()
-                                currentProfileIndex += 1
-                                if (currentProfileIndex >= visibleProfiles.size) reloadFeed()
+                        val userId = currentProfile.userId
+                        markUserReacted(userId)
+                        onSwipe(userId, true)
+                            .onSuccess { onLikeConsumed() }
+                            .onFailure { e ->
+                                if (!e.isAlreadySwipedError()) unmarkUserReacted(userId)
+                                feedError = e.message
                             }
-                            .onFailure { feedError = it.message }
                     }
                 },
-                onLikeLimitReached = onOpenSubscription,
+                onLikeLimitReached = {
+                    if (!hasActivePremium) onOpenSubscription()
+                },
             )
         }
 
@@ -351,7 +389,10 @@ private fun SwipeableVideoCard(
 
 @Composable
 private fun NoVideosAvailableOverlay(
+    title: String,
     detailMessage: String,
+    showPreferencesAction: Boolean = false,
+    onOpenPreferences: () -> Unit = {},
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     scaleDp: (Float) -> Dp,
@@ -373,7 +414,7 @@ private fun NoVideosAvailableOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "Нет доступных видео",
+                text = title,
                 fontSize = scaleSp(18f),
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
@@ -385,10 +426,24 @@ private fun NoVideosAvailableOverlay(
                 color = Color.White.copy(alpha = 0.85f),
             )
             Spacer(Modifier.height(scaleDp(16f)))
+            if (showPreferencesAction) {
+                Button(
+                    onClick = onOpenPreferences,
+                    colors = AppButtonDefaults.blue(),
+                    contentPadding = PaddingValues(horizontal = scaleDp(18f), vertical = scaleDp(10f)),
+                ) {
+                    Text(
+                        text = "Настроить предпочтения",
+                        fontSize = scaleSp(14f),
+                        color = Color.White,
+                    )
+                }
+                Spacer(Modifier.height(scaleDp(10f)))
+            }
             Button(
                 onClick = onRefresh,
                 enabled = !isRefreshing,
-                colors = AppButtonDefaults.blue(),
+                colors = AppButtonDefaults.outlinedBlue(),
                 contentPadding = PaddingValues(horizontal = scaleDp(18f), vertical = scaleDp(10f)),
             ) {
                 Text(

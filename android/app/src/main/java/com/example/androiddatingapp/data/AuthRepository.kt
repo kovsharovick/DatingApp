@@ -5,6 +5,7 @@ import com.example.androiddatingapp.data.api.DatingApiService
 import com.example.androiddatingapp.data.api.dto.LoginRequest
 import com.example.androiddatingapp.data.api.dto.RegisterRequest
 import com.example.androiddatingapp.data.api.dto.UserProfileResponse
+import com.example.androiddatingapp.data.DatingRepository.Companion.mergeProfile
 import com.example.androiddatingapp.ui.model.Gender
 import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.util.DateOfBirthInput
@@ -120,7 +121,7 @@ class AuthRepository(
             avatarUrl = MediaUrlResolver.resolve(avatarUrl),
             isProfileActive = !hidden,
             onboardingCompleted = !videoUrl.isNullOrBlank(),
-        )
+        ).mergeProfile(this, email)
 
     private fun <T> Result<T>.mapError(): Result<T> =
         exceptionOrNull()?.let { Result.failure(Exception(ApiClient.parseErrorMessage(it))) }

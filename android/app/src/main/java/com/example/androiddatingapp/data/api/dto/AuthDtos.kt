@@ -32,6 +32,10 @@ data class UserProfileResponse(
     val thumbnailUrl: String? = null,
     val avatarUrl: String? = null,
     val hidden: Boolean = false,
+    val minAge: Int? = null,
+    val maxAge: Int? = null,
+    val radiusKm: Int? = null,
+    val preferredGenders: List<String>? = null,
 )
 
 data class ApiErrorBody(

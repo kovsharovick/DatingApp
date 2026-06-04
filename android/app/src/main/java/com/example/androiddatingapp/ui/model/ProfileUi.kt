@@ -9,4 +9,6 @@ data class ProfileUi(
     val videoUrl: String = "",
     val thumbnailUrl: String = "",
     val avatarUrl: String = "",
+    /** На сервере: этот пользователь уже свайпнул вас (приоритет в ленте). */
+    val likedYou: Boolean = false,
 )

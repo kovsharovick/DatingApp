@@ -99,6 +99,10 @@ object ApiClient {
                     return when {
                         raw.contains("City not found", ignoreCase = true) ->
                             "Город не найден на сервере. Выберите город из списка подсказок."
+                        raw.contains("radiusKm", ignoreCase = true) ->
+                            "Радиус слишком большой. Максимум 10 000 км."
+                        raw.contains("minAge", ignoreCase = true) || raw.contains("maxAge", ignoreCase = true) ->
+                            "Проверьте диапазон возраста (18–65 лет)."
                         else -> raw
                     }
                 }

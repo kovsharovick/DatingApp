@@ -61,6 +61,8 @@ import com.example.androiddatingapp.data.MediaUrlResolver
 import com.example.androiddatingapp.ui.components.FeedMediaContent
 import com.example.androiddatingapp.ui.model.Gender
 import com.example.androiddatingapp.ui.model.UserAccount
+import com.example.androiddatingapp.ui.model.UserPreferences
+import com.example.androiddatingapp.ui.model.toPreferences
 import com.example.androiddatingapp.ui.theme.AppBlue
 import com.example.androiddatingapp.ui.theme.AppBlueLight
 import com.example.androiddatingapp.ui.theme.AppButtonDefaults
@@ -103,12 +105,17 @@ fun ProfileScreen(
     onOpenSettingsConsumed: () -> Unit,
     openSubscription: Boolean = false,
     onOpenSubscriptionConsumed: () -> Unit = {},
+    isPremiumActive: Boolean = false,
+    premiumExpiresLabel: String? = null,
     onSearchCities: suspend (String) -> Result<List<String>>,
     onSaveProfile: suspend (UserProfileUi) -> Result<UserAccount>,
     onToggleProfileActive: suspend (Boolean) -> Result<UserAccount>,
-    onActivatePremium: suspend () -> Result<Int>,
+    onActivatePremium: suspend () -> Result<UserAccount>,
     onUploadVideo: suspend (Uri) -> Result<UserAccount>,
     onUploadAvatar: suspend (Uri) -> Result<UserAccount>,
+    onSavePreferences: suspend (UserPreferences) -> Result<UserAccount>,
+    openPreferences: Boolean = false,
+    onOpenPreferencesConsumed: () -> Unit = {},
     onLogout: () -> Unit,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
@@ -123,6 +130,7 @@ fun ProfileScreen(
     var changeVideoSheetOpen by remember { mutableStateOf(false) }
     var changePasswordOpen by remember { mutableStateOf(false) }
     var subscriptionSheetOpen by remember { mutableStateOf(false) }
+    var preferencesSheetOpen by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
     var mediaError by remember { mutableStateOf<String?>(null) }
     var mediaLoading by remember { mutableStateOf(false) }
@@ -157,9 +165,13 @@ fun ProfileScreen(
         settingsSheetOpen = true
         onOpenSettingsConsumed()
     }
-    if (openSubscription) {
+    if (openSubscription && !isPremiumActive) {
         subscriptionSheetOpen = true
         onOpenSubscriptionConsumed()
+    }
+    if (openPreferences) {
+        preferencesSheetOpen = true
+        onOpenPreferencesConsumed()
     }
 
     Surface(modifier.fillMaxSize()) {
@@ -209,17 +221,45 @@ fun ProfileScreen(
                 remainingLikes = account.remainingLikes(),
                 mediaLoading = mediaLoading,
                 mediaError = mediaError,
-                onOpenSubscription = { subscriptionSheetOpen = true },
+                onOpenSubscription = {
+                    if (!isPremiumActive) subscriptionSheetOpen = true
+                },
+                isPremiumActive = isPremiumActive,
+                premiumExpiresLabel = premiumExpiresLabel,
                 onOpenPreview = { showPreview = true },
                 onUploadVideo = { changeVideoSheetOpen = true },
                 onChangeAvatar = { launchImagePicker(avatarPicker) },
                 onOpenEdit = { editSheetOpen = true },
                 onOpenSettings = { settingsSheetOpen = true },
+                onOpenPreferences = { preferencesSheetOpen = true },
+                preferencesSummary = account.toPreferences().summaryLine(account.city),
                 scaleDp = scaleDp,
                 scaleSp = scaleSp,
                 modifier = Modifier.fillMaxSize()
             )
         }
+    }
+
+    if (preferencesSheetOpen) {
+        PreferencesSheet(
+            initial = account.toPreferences(),
+            cityName = account.city,
+            onDismiss = { preferencesSheetOpen = false },
+            onSave = { prefs ->
+                scope.launch {
+                    profileError = null
+                    onSavePreferences(prefs)
+                        .onSuccess { saved ->
+                            onAccountUpdate(saved)
+                            preferencesSheetOpen = false
+                            profileError = null
+                        }
+                        .onFailure { profileError = it.message }
+                }
+            },
+            scaleDp = scaleDp,
+            scaleSp = scaleSp,
+        )
     }
 
     if (editSheetOpen) {
@@ -283,7 +323,7 @@ fun ProfileScreen(
         )
     }
 
-    if (subscriptionSheetOpen) {
+    if (subscriptionSheetOpen && !isPremiumActive) {
         SwipeSubscriptionSheet(
             remainingLikes = account.remainingLikes(),
             onDismiss = { subscriptionSheetOpen = false },
@@ -291,10 +331,8 @@ fun ProfileScreen(
                 scope.launch {
                     profileError = null
                     onActivatePremium()
-                        .onSuccess { likesRemaining ->
-                            onAccountUpdate(
-                                DatingRepository.accountWithLikesRemaining(account, likesRemaining),
-                            )
+                        .onSuccess { updated ->
+                            onAccountUpdate(updated)
                             subscriptionSheetOpen = false
                         }
                         .onFailure { profileError = it.message }
@@ -316,11 +354,15 @@ private fun ProfileMainScreen(
     mediaLoading: Boolean,
     mediaError: String?,
     onOpenSubscription: () -> Unit,
+    isPremiumActive: Boolean,
+    premiumExpiresLabel: String?,
     onOpenPreview: () -> Unit,
     onUploadVideo: () -> Unit,
     onChangeAvatar: () -> Unit,
     onOpenEdit: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenPreferences: () -> Unit,
+    preferencesSummary: String,
     scaleDp: (Float) -> Dp,
     scaleSp: (Float) -> TextUnit,
     modifier: Modifier = Modifier
@@ -397,6 +439,22 @@ private fun ProfileMainScreen(
 
         Spacer(Modifier.height(scaleDp(12f)))
 
+        OutlinedButton(
+            onClick = onOpenPreferences,
+            modifier = Modifier.fillMaxWidth(),
+            colors = AppButtonDefaults.outlinedBlue(),
+        ) {
+            Text("Предпочтения", fontSize = scaleSp(14f))
+        }
+        Spacer(Modifier.height(scaleDp(6f)))
+        Text(
+            text = preferencesSummary,
+            fontSize = scaleSp(12f),
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+        )
+
+        Spacer(Modifier.height(scaleDp(12f)))
+
         if (mediaError != null) {
             Text(
                 text = mediaError,
@@ -406,13 +464,23 @@ private fun ProfileMainScreen(
             Spacer(Modifier.height(scaleDp(8f)))
         }
 
-        GlowingSubscriptionButton(
-            remainingLikes = remainingLikes,
-            onClick = onOpenSubscription,
-            scaleDp = scaleDp,
-            scaleSp = scaleSp,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (isPremiumActive) {
+            PremiumActiveCard(
+                expiresLabel = premiumExpiresLabel,
+                remainingLikes = remainingLikes,
+                scaleDp = scaleDp,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            GlowingSubscriptionButton(
+                remainingLikes = remainingLikes,
+                onClick = onOpenSubscription,
+                scaleDp = scaleDp,
+                scaleSp = scaleSp,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
 
         Spacer(Modifier.height(scaleDp(12f)))
 
@@ -912,6 +980,40 @@ private fun ChangeVideoSheet(
 
             Spacer(Modifier.height(scaleDp(18f)))
         }
+    }
+}
+
+@Composable
+private fun PremiumActiveCard(
+    expiresLabel: String?,
+    remainingLikes: Int,
+    scaleDp: (Float) -> Dp,
+    scaleSp: (Float) -> TextUnit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(scaleDp(16f)))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .padding(scaleDp(14f)),
+    ) {
+        Text(
+            text = "Подписка Pro активна",
+            fontSize = scaleSp(16f),
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(scaleDp(6f)))
+        Text(
+            text = buildString {
+                append("Лайков сегодня: $remainingLikes")
+                if (!expiresLabel.isNullOrBlank()) {
+                    append("\nДействует до: $expiresLabel")
+                }
+            },
+            fontSize = scaleSp(13f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+        )
     }
 }
 

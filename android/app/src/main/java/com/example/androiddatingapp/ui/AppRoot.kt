@@ -38,8 +38,10 @@ import com.example.androiddatingapp.ui.messages.ChatUi
 import com.example.androiddatingapp.ui.messages.MessageUi
 import com.example.androiddatingapp.ui.messages.MessagesScreen
 import com.example.androiddatingapp.ui.messages.rememberInboxHasUnread
+import com.example.androiddatingapp.data.SubscriptionStatus
 import com.example.androiddatingapp.ui.model.ScreenInfo
 import com.example.androiddatingapp.ui.model.UserAccount
+import com.example.androiddatingapp.ui.model.UserPreferences
 import com.example.androiddatingapp.ui.profile.ProfileScreen
 import com.example.androiddatingapp.ui.profile.UserProfileUi
 import com.example.androiddatingapp.ui.util.rememberScreenScale
@@ -58,9 +60,10 @@ fun AppRoot(
     val scope = rememberCoroutineScope()
     val datingRepository = remember { DatingRepository() }
     val stompChatClient = remember { StompChatClient() }
+    val sessionStore = remember { SessionStore(context.applicationContext) }
     val authRepository = remember {
         AuthRepository(
-            sessionStore = SessionStore(context.applicationContext),
+            sessionStore = sessionStore,
             datingRepository = datingRepository,
         )
     }
@@ -81,20 +84,29 @@ fun AppRoot(
     var feedRefreshToken by remember { mutableIntStateOf(0) }
     var openProfileSettings by remember { mutableStateOf(false) }
     var openProfileSubscription by remember { mutableStateOf(false) }
+    var openProfilePreferences by remember { mutableStateOf(false) }
+    var swipedUserIds by remember { mutableStateOf(setOf<Long>()) }
 
     val searchCities: suspend (String) -> Result<List<String>> = remember(datingRepository, context) {
         { query -> datingRepository.searchCities(context, query) }
     }
     suspend fun syncSubscription(account: UserAccount): UserAccount {
         return datingRepository.getSubscription()
-            .map { sub -> DatingRepository.accountWithLikesRemaining(account, sub.likesRemaining) }
+            .map { sub -> DatingRepository.accountWithSubscription(account, sub) }
             .getOrElse { account }
     }
 
-    fun openProfileTab(openSettings: Boolean = false, openSubscription: Boolean = false) {
+    fun openProfileTab(
+        openSettings: Boolean = false,
+        openSubscription: Boolean = false,
+        openPreferences: Boolean = false,
+    ) {
         selectedTab = 2
         if (openSettings) openProfileSettings = true
-        if (openSubscription) openProfileSubscription = true
+        if (openSubscription && session?.hasActivePremium() != true) {
+            openProfileSubscription = true
+        }
+        if (openPreferences) openProfilePreferences = true
     }
 
     LaunchedEffect(authRepository) {
@@ -190,7 +202,7 @@ fun AppRoot(
             session != null && !session!!.onboardingCompleted -> {
                 val user = session!!
                 OnboardingScreen(
-                    userName = user.name,
+                    account = user,
                     hasVideoAlready = user.hasVideo,
                     onUploadVideo = { uri ->
                         datingRepository.uploadVideo(context, uri).map { profile ->
@@ -199,16 +211,32 @@ fun AppRoot(
                             Unit
                         }
                     },
-                    onComplete = {
-                        scope.launch {
-                            val user = session ?: return@launch
-                            session = datingRepository.refreshAccount(user.email, user)
-                                .map { refreshed -> refreshed.copy(onboardingCompleted = true) }
-                                .getOrElse { user.copy(onboardingCompleted = true) }
+                    onSavePreferences = { prefs ->
+                        val current = session ?: user
+                        datingRepository.updatePreferences(current.email, current, prefs).map {
+                            session = it.copy(onboardingCompleted = false)
+                            Unit
                         }
                     },
-                    onSkip = {
-                        session = user.copy(onboardingCompleted = true)
+                    onSkipPreferences = {
+                        val current = session ?: user
+                        val defaults = UserPreferences.skipDefaults(
+                            current.gender,
+                            current.ageYears(),
+                        )
+                        datingRepository.updatePreferences(current.email, current, defaults).map {
+                            session = it.copy(onboardingCompleted = false)
+                            Unit
+                        }
+                    },
+                    onFinished = {
+                        scope.launch {
+                            val current = session ?: user
+                            session = datingRepository.refreshAccount(current.email, current)
+                                .map { refreshed -> refreshed.copy(onboardingCompleted = true) }
+                                .getOrElse { current.copy(onboardingCompleted = true) }
+                            feedRefreshToken++
+                        }
                     },
                     scaleDp = scale.dp,
                     scaleSp = scale.sp,
@@ -219,6 +247,14 @@ fun AppRoot(
             else -> {
                 val user = session!!
 
+                val inboxHasUnread = rememberInboxHasUnread(
+                    loadMatches = {
+                        datingRepository.getMatches().map { list ->
+                            list.map { it.toChatUi() }
+                        }
+                    },
+                )
+
                 LaunchedEffect(selectedTab, session?.userId) {
                     val current = session ?: return@LaunchedEffect
                     when (selectedTab) {
@@ -228,13 +264,16 @@ fun AppRoot(
                     }
                 }
 
-                val inboxHasUnread = rememberInboxHasUnread(
-                    loadMatches = {
-                        datingRepository.getMatches().map { matches ->
-                            matches.map { it.toChatUi() }
-                        }
-                    },
-                )
+                LaunchedEffect(user.userId) {
+                    val uid = user.userId ?: return@LaunchedEffect
+                    swipedUserIds = sessionStore.getSwipedUserIds(uid)
+                }
+
+                LaunchedEffect(openProfileSubscription, user.hasActivePremium()) {
+                    if (openProfileSubscription && user.hasActivePremium()) {
+                        openProfileSubscription = false
+                    }
+                }
 
                 when (selectedTab) {
                     0 -> HomeScreen(
@@ -249,8 +288,25 @@ fun AppRoot(
                                 }
                             }
                         },
-                        onOpenSubscription = { openProfileTab(openSubscription = true) },
+                        onOpenSubscription = {
+                            if (!user.hasActivePremium()) openProfileTab(openSubscription = true)
+                        },
+                        hasActivePremium = user.hasActivePremium(),
+                        swipedUserIds = swipedUserIds,
+                        onUserSwiped = { targetId ->
+                            user.userId?.let { uid ->
+                                swipedUserIds = swipedUserIds + targetId
+                                scope.launch { sessionStore.addSwipedUserId(uid, targetId) }
+                            }
+                        },
+                        onUserUnswiped = { targetId ->
+                            user.userId?.let { uid ->
+                                swipedUserIds = swipedUserIds - targetId
+                                scope.launch { sessionStore.removeSwipedUserId(uid, targetId) }
+                            }
+                        },
                         onOpenProfile = { openProfileTab() },
+                        onOpenPreferences = { openProfileTab(openPreferences = true) },
                         onOpenSettings = { openProfileTab(openSettings = true) },
                         loadFeed = { datingRepository.getFeed() },
                         feedRefreshToken = feedRefreshToken,
@@ -302,9 +358,13 @@ fun AppRoot(
                                 current.mergeProfile(profile, current.email)
                             }
                         },
+                        isPremiumActive = user.hasActivePremium(),
+                        premiumExpiresLabel = SubscriptionStatus.formatExpiresLabel(user.premiumExpiresAt),
                         onActivatePremium = {
+                            val current = session ?: user
                             datingRepository.activatePremium(UserAccount.PRO_DURATION_DAYS).map {
-                                datingRepository.getSubscription().getOrThrow().likesRemaining
+                                val sub = datingRepository.getSubscription().getOrThrow()
+                                DatingRepository.accountWithSubscription(current, sub)
                             }
                         },
                         onUploadVideo = { uri ->
@@ -321,7 +381,18 @@ fun AppRoot(
                         },
                         openSettings = openProfileSettings,
                         onOpenSettingsConsumed = { openProfileSettings = false },
-                        openSubscription = openProfileSubscription,
+                        openSubscription = openProfileSubscription && !user.hasActivePremium(),
+                        openPreferences = openProfilePreferences,
+                        onOpenPreferencesConsumed = { openProfilePreferences = false },
+                        onSavePreferences = { prefs ->
+                            val current = session ?: user
+                            datingRepository.updatePreferences(current.email, current, prefs)
+                                .map { updated ->
+                                    session = updated
+                                    feedRefreshToken++
+                                    updated
+                                }
+                        },
                         onOpenSubscriptionConsumed = { openProfileSubscription = false },
                         onLogout = {
                             stompChatClient.disconnect()

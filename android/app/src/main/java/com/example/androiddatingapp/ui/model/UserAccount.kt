@@ -22,7 +22,15 @@ data class UserAccount(
     val likesUsedToday: Int = 0,
     val bonusLikes: Int = 0,
     val likeQuotaDay: String = "",
+    val isPremiumActive: Boolean = false,
+    val premiumExpiresAt: String? = null,
+    val minAge: Int = 18,
+    val maxAge: Int = 65,
+    val radiusKm: Int = 50,
+    val preferredGenders: List<Gender> = emptyList(),
+    val preferencesConfigured: Boolean = false,
 ) {
+    fun hasActivePremium(): Boolean = isPremiumActive
     fun ageYears(): Int? = DateOfBirthInput.parseAgeYears(dateOfBirth)
 
     fun canUseFeed(): Boolean = hasVideo && isProfileActive

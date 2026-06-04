@@ -9,6 +9,7 @@ import com.example.androiddatingapp.data.api.dto.FeedItemDto
 import com.example.androiddatingapp.data.api.dto.MatchDto
 import com.example.androiddatingapp.data.api.dto.MessageDto
 import com.example.androiddatingapp.data.api.dto.SubscriptionDto
+import com.example.androiddatingapp.data.SubscriptionStatus
 import com.example.androiddatingapp.data.api.dto.SwipeDirectionDto
 import com.example.androiddatingapp.data.api.dto.SwipeRequestDto
 import com.example.androiddatingapp.data.api.dto.UserProfileResponse
@@ -16,6 +17,8 @@ import com.example.androiddatingapp.data.api.dto.UserUpdateRequestDto
 import com.example.androiddatingapp.ui.model.Gender
 import com.example.androiddatingapp.ui.model.ProfileUi
 import com.example.androiddatingapp.ui.model.UserAccount
+import com.example.androiddatingapp.ui.model.UserPreferences
+import com.example.androiddatingapp.ui.model.withPreferences
 import com.example.androiddatingapp.ui.util.DateOfBirthInput
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -111,6 +114,23 @@ class DatingRepository(
         api.updateProfile(request)
     }.mapApiError()
 
+    suspend fun updatePreferences(
+        email: String,
+        account: UserAccount,
+        preferences: UserPreferences,
+    ): Result<UserAccount> = runCatching {
+        val apiPrefs = preferences.clampForApi()
+        val response = api.updateProfile(
+            UserUpdateRequestDto(
+                minAge = apiPrefs.minAge,
+                maxAge = apiPrefs.maxAge,
+                radiusKm = apiPrefs.radiusKm,
+                preferredGenders = apiPrefs.toApiGenderList(),
+            ),
+        )
+        account.mergeProfile(response, email).withPreferences(apiPrefs)
+    }.mapApiError()
+
     suspend fun updateProfileFromAccount(
         email: String,
         account: UserAccount,
@@ -190,6 +210,7 @@ class DatingRepository(
         videoUrl = MediaUrlResolver.resolve(videoUrl),
         thumbnailUrl = MediaUrlResolver.resolve(thumbnailUrl),
         avatarUrl = MediaUrlResolver.resolve(avatarUrl),
+        likedYou = likedYou,
     )
 
     companion object {
@@ -204,7 +225,30 @@ class DatingRepository(
             videoTitle = videoFileLabel(profile.videoUrl),
             avatarUrl = MediaUrlResolver.resolve(profile.avatarUrl),
             isProfileActive = !profile.hidden,
+            minAge = profile.minAge?.coerceIn(UserPreferences.MIN_AGE, UserPreferences.MAX_AGE) ?: minAge,
+            maxAge = profile.maxAge?.coerceIn(UserPreferences.MIN_AGE, UserPreferences.MAX_AGE) ?: maxAge,
+            radiusKm = profile.radiusKm?.coerceIn(
+                UserPreferences.MIN_RADIUS_KM,
+                UserPreferences.MAX_RADIUS_KM,
+            ) ?: radiusKm,
+            preferredGenders = when {
+                profile.preferredGenders == null -> preferredGenders
+                else -> parsePreferredGenders(profile.preferredGenders) ?: preferredGenders
+            },
+            preferencesConfigured = preferencesConfigured ||
+                profile.minAge != null ||
+                profile.maxAge != null ||
+                profile.radiusKm != null ||
+                !profile.preferredGenders.isNullOrEmpty(),
         )
+
+        private fun parsePreferredGenders(raw: List<String>?): List<Gender>? {
+            if (raw.isNullOrEmpty()) return null
+            val parsed = raw.mapNotNull { name ->
+                runCatching { Gender.valueOf(name.trim().uppercase()) }.getOrNull()
+            }
+            return parsed.takeIf { it.isNotEmpty() }
+        }
 
         fun matchesToNotifications(matches: List<MatchDto>): List<MatchNotification> =
             matches.map { match ->
@@ -246,6 +290,17 @@ class DatingRepository(
                     bonusLikes = likesRemaining - UserAccount.DAILY_FREE_LIKES,
                 )
             }
+        }
+
+        fun accountWithSubscription(account: UserAccount, sub: SubscriptionDto): UserAccount {
+            val premium = SubscriptionStatus.isPremiumActive(sub)
+            return accountWithLikesRemaining(
+                account.copy(
+                    isPremiumActive = premium,
+                    premiumExpiresAt = sub.expiresAt,
+                ),
+                sub.likesRemaining,
+            )
         }
     }
 }
