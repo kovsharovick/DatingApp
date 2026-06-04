@@ -30,6 +30,7 @@ import com.example.androiddatingapp.data.api.dto.UserUpdateRequestDto
 import com.example.androiddatingapp.ui.auth.LoginScreen
 import com.example.androiddatingapp.ui.auth.OnboardingScreen
 import com.example.androiddatingapp.ui.auth.RegisterScreen
+import com.example.androiddatingapp.ui.components.AppSplashScreen
 import com.example.androiddatingapp.ui.components.BottomTabs
 import com.example.androiddatingapp.ui.home.HomeScreen
 import com.example.androiddatingapp.ui.messages.ChatUi
@@ -41,6 +42,7 @@ import com.example.androiddatingapp.ui.model.UserAccount
 import com.example.androiddatingapp.ui.profile.ProfileScreen
 import com.example.androiddatingapp.ui.profile.UserProfileUi
 import com.example.androiddatingapp.ui.util.rememberScreenScale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class AuthMode { Login, Register }
@@ -66,6 +68,12 @@ fun AppRoot(
     var authError by remember { mutableStateOf<String?>(null) }
     var authLoading by remember { mutableStateOf(false) }
     var restoringSession by remember { mutableStateOf(true) }
+    var showSplash by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        delay(1200)
+        showSplash = false
+    }
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var openProfileSettings by remember { mutableStateOf(false) }
@@ -91,6 +99,11 @@ fun AppRoot(
         authRepository.restoreSession()
             .onSuccess { account -> session = syncSubscription(account) }
         restoringSession = false
+    }
+
+    if (showSplash) {
+        AppSplashScreen(scaleDp = scale.dp, modifier = modifier.fillMaxSize())
+        return
     }
 
     if (restoringSession) {
@@ -132,11 +145,13 @@ fun AppRoot(
                         modifier = Modifier.fillMaxSize(),
                     )
                     AuthMode.Register -> RegisterScreen(
-                        onRegister = { email, password, name, dateOfBirth, gender, city ->
+                        onRegister = { email, password, name, dateOfBirth, gender, city, description ->
                             authError = null
                             authLoading = true
                             scope.launch {
-                                authRepository.register(email, password, name, dateOfBirth, gender, city)
+                                authRepository.register(
+                                    email, password, name, dateOfBirth, gender, city, description,
+                                )
                                     .onSuccess { account ->
                                         session = syncSubscription(account)
                                         selectedTab = 0
@@ -174,15 +189,21 @@ fun AppRoot(
                     },
                     onComplete = { description ->
                         scope.launch {
-                            if (description.isNotBlank()) {
+                            val user = session ?: return@launch
+                            session = if (description.isNotBlank()) {
                                 datingRepository.updateProfile(
-                                    UserUpdateRequestDto(description = description),
-                                )
+                                    UserUpdateRequestDto(description = description.trim()),
+                                ).map { profile ->
+                                    user.mergeProfile(profile, user.email).copy(onboardingCompleted = true)
+                                }.getOrElse {
+                                    user.copy(
+                                        description = description.trim(),
+                                        onboardingCompleted = true,
+                                    )
+                                }
+                            } else {
+                                user.copy(onboardingCompleted = true)
                             }
-                            session = session?.copy(
-                                description = description,
-                                onboardingCompleted = true,
-                            )
                         }
                     },
                     onSkip = {
@@ -320,6 +341,7 @@ fun AppRoot(
 private fun com.example.androiddatingapp.data.api.dto.MatchDto.toChatUi(): ChatUi = ChatUi(
     matchId = matchId,
     name = partnerName,
+    avatarUrl = partnerAvatarUrl.orEmpty(),
     lastMessage = lastMessagePreview.orEmpty(),
     time = DatingRepository.formatDateTime(matchedAt),
     unreadCount = 0,

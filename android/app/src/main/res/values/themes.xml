@@ -6,4 +6,8 @@
         <item name="android:statusBarColor">@color/app_background</item>
         <item name="android:navigationBarColor">@color/app_background</item>
     </style>
+
+    <style name="Theme.AndroidDatingApp.Splash" parent="Theme.AndroidDatingApp">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
 </resources>

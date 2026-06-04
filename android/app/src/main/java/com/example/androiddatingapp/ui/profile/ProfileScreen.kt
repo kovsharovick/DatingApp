@@ -30,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,7 +56,7 @@ import com.example.androiddatingapp.ui.components.launchImagePicker
 import com.example.androiddatingapp.ui.components.launchVideoPicker
 import com.example.androiddatingapp.ui.components.rememberImagePicker
 import com.example.androiddatingapp.ui.components.rememberVideoPicker
-import coil.compose.AsyncImage
+import com.example.androiddatingapp.ui.components.UserAvatar
 import com.example.androiddatingapp.data.DatingRepository
 import com.example.androiddatingapp.ui.model.Gender
 import com.example.androiddatingapp.ui.model.UserAccount
@@ -125,6 +126,20 @@ fun ProfileScreen(
     var mediaError by remember { mutableStateOf<String?>(null) }
     var mediaLoading by remember { mutableStateOf(false) }
     var pendingAvatarUri by remember { mutableStateOf<Uri?>(null) }
+    var localAvatarUri by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(account.avatarUrl) {
+        val remote = account.avatarUrl
+        if (remote.isNotBlank() &&
+            !remote.contains("localhost") &&
+            !remote.contains("127.0.0.1") &&
+            !remote.contains("10.0.2.2")
+        ) {
+            localAvatarUri = null
+        }
+    }
+
+    val displayAvatarUrl = localAvatarUri ?: profile.avatarUrl
 
     val videoPicker = rememberVideoPicker { uri ->
         scope.launch {
@@ -160,6 +175,7 @@ fun ProfileScreen(
                 onDismiss = { pendingAvatarUri = null },
                 onConfirm = { croppedUri ->
                     pendingAvatarUri = null
+                    localAvatarUri = croppedUri.toString()
                     scope.launch {
                         mediaLoading = true
                         mediaError = null
@@ -185,6 +201,7 @@ fun ProfileScreen(
         } else {
             ProfileMainScreen(
                 profile = profile,
+                avatarUrl = displayAvatarUrl,
                 cityAgeLine = profileCityAgeLine(account.city, account.ageYears()),
                 hasVideo = account.hasVideo,
                 remainingLikes = account.remainingLikes(),
@@ -290,6 +307,7 @@ fun ProfileScreen(
 @Composable
 private fun ProfileMainScreen(
     profile: UserProfileUi,
+    avatarUrl: String,
     cityAgeLine: String,
     hasVideo: Boolean,
     remainingLikes: Int,
@@ -330,13 +348,13 @@ private fun ProfileMainScreen(
                 .padding(scaleDp(14f)),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            GenderAvatar(
+            UserAvatar(
                 name = profile.name,
                 gender = profile.gender,
-                avatarUrl = profile.avatarUrl,
+                avatarUrl = avatarUrl,
                 onClick = onChangeAvatar,
                 size = scaleDp(68f),
-                scaleSp = scaleSp
+                scaleSp = scaleSp,
             )
             Spacer(Modifier.width(scaleDp(12f)))
             Column(Modifier.weight(1f)) {
@@ -528,47 +546,6 @@ private fun DescriptionCard(
 }
 
 @Composable
-private fun GenderAvatar(
-    name: String,
-    gender: Gender,
-    avatarUrl: String,
-    onClick: () -> Unit,
-    size: Dp,
-    scaleSp: (Float) -> TextUnit,
-    modifier: Modifier = Modifier
-) {
-    val (bg, letterColor) = when (gender) {
-        Gender.MALE -> AppBlueLight.copy(alpha = 0.35f) to AppBlue
-        Gender.FEMALE -> AppRedLight.copy(alpha = 0.35f) to AppRed
-    }
-
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(bg)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        if (avatarUrl.isNotBlank()) {
-            AsyncImage(
-                model = avatarUrl,
-                contentDescription = "Фото профиля",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Text(
-                text = name.trim().take(1).uppercase(),
-                fontSize = scaleSp(22f),
-                fontWeight = FontWeight.Bold,
-                color = letterColor
-            )
-        }
-    }
-}
-
-@Composable
 private fun VideoCard(
     title: String,
     subtitle: String,
@@ -692,6 +669,7 @@ private fun EditProfileSheet(
                 onSearch = onSearchCities,
                 scaleSp = scaleSp,
                 scaleDp = scaleDp,
+                deferSearchUntilEdited = true,
             )
             Spacer(Modifier.height(scaleDp(10f)))
             OutlinedTextField(

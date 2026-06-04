@@ -11,13 +11,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.example.androiddatingapp.ui.components.AppImageLoader
 import com.example.androiddatingapp.ui.AppRoot
 import com.example.androiddatingapp.ui.model.ScreenInfo
 import com.example.androiddatingapp.ui.theme.AndroidDatingAppTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_AndroidDatingApp)
         super.onCreate(savedInstanceState)
+        AppImageLoader.install(this)
         enableEdgeToEdge()
 
         val displayMetrics = DisplayMetrics().also { dm ->

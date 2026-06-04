@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,13 +32,22 @@ fun CityAutocompleteField(
     modifier: Modifier = Modifier,
     label: String = "Город",
     minQueryLength: Int = 1,
+    /** Не искать и не показывать список, пока пользователь сам не начнёт менять поле. */
+    deferSearchUntilEdited: Boolean = false,
 ) {
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     var expanded by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(value) {
+    var userEdited by remember { mutableStateOf(!deferSearchUntilEdited) }
+
+    LaunchedEffect(value, userEdited) {
         searchError = null
+        if (deferSearchUntilEdited && !userEdited) {
+            suggestions = emptyList()
+            expanded = false
+            return@LaunchedEffect
+        }
         val query = value.trim()
         if (query.length < minQueryLength) {
             suggestions = emptyList()
@@ -71,14 +79,14 @@ fun CityAutocompleteField(
 
     ExposedDropdownMenuBox(
         expanded = expanded && suggestions.isNotEmpty(),
-        onExpandedChange = { expanded = it },
+        onExpandedChange = { if (suggestions.isNotEmpty()) expanded = it },
         modifier = modifier.fillMaxWidth(),
     ) {
         OutlinedTextField(
             value = value,
             onValueChange = {
+                userEdited = true
                 onValueChange(it)
-                expanded = it.trim().length >= minQueryLength
                 searchError = null
             },
             label = { Text(label, fontSize = scaleSp(12f)) },
@@ -86,13 +94,6 @@ fun CityAutocompleteField(
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor(),
-            trailingIcon = {
-                if (loading) {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = true)
-                } else {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded && suggestions.isNotEmpty())
-                }
-            },
             supportingText = when {
                 loading -> {
                     { Text("Поиск…", fontSize = scaleSp(11f)) }
@@ -119,6 +120,7 @@ fun CityAutocompleteField(
                         )
                     },
                     onClick = {
+                        userEdited = true
                         onValueChange(city)
                         onCitySelected?.invoke(city)
                         expanded = false

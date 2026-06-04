@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.example.androiddatingapp.ui.model.Gender
 
+private const val DESCRIPTION_MAX_LENGTH = 500
+
 @Composable
 fun RegisterScreen(
     onRegister: (
@@ -46,6 +48,7 @@ fun RegisterScreen(
         dateOfBirth: String,
         gender: Gender,
         city: String,
+        description: String,
     ) -> Unit,
     onBackToLogin: () -> Unit,
     onSearchCities: suspend (String) -> Result<List<String>>,
@@ -62,6 +65,7 @@ fun RegisterScreen(
     var dateOfBirth by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf<Gender?>(null) }
     var city by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
     var citySelectedFromList by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<String?>(null) }
 
@@ -172,6 +176,25 @@ fun RegisterScreen(
                 fontSize = scaleSp(11f),
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
+            Spacer(Modifier.height(scaleDp(12f)))
+            OutlinedTextField(
+                value = description,
+                onValueChange = {
+                    if (it.length <= DESCRIPTION_MAX_LENGTH) description = it
+                    localError = null
+                },
+                label = { Text("О себе", fontSize = scaleSp(12f)) },
+                placeholder = { Text("Необязательно", fontSize = scaleSp(12f)) },
+                supportingText = {
+                    Text(
+                        text = "${description.length}/$DESCRIPTION_MAX_LENGTH",
+                        fontSize = scaleSp(11f),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 4,
+            )
         }
 
         val displayError = localError ?: errorMessage
@@ -211,7 +234,8 @@ fun RegisterScreen(
                             name.trim(),
                             dateOfBirth.trim(),
                             gender!!,
-                            city.trim()
+                            city.trim(),
+                            description.trim(),
                         )
                     }
                 },

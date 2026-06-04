@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import com.example.androiddatingapp.ui.components.UserAvatar
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 @Composable
@@ -435,20 +436,12 @@ private fun ChatRow(
             .padding(scaleDp(12f)),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(scaleDp(44f))
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = chat.name.take(1),
-                fontSize = scaleSp(16f),
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        UserAvatar(
+            name = chat.name,
+            avatarUrl = chat.avatarUrl,
+            size = scaleDp(44f),
+            scaleSp = scaleSp,
+        )
 
         Spacer(Modifier.width(scaleDp(12f)))
 
@@ -530,11 +523,21 @@ private fun ChatDetail(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Spacer(Modifier.width(scaleDp(10f)))
+            UserAvatar(
+                name = chat.name,
+                avatarUrl = chat.avatarUrl,
+                size = scaleDp(36f),
+                scaleSp = scaleSp,
+            )
+            Spacer(Modifier.width(scaleDp(10f)))
             Text(
                 text = chat.name,
                 fontSize = scaleSp(18f),
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 

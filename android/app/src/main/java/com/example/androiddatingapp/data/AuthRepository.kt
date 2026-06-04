@@ -49,6 +49,7 @@ class AuthRepository(
         dateOfBirth: String,
         gender: Gender,
         city: String,
+        description: String = "",
     ): Result<UserAccount> {
         val uiDateOfBirth = dateOfBirth.trim()
         val apiDateOfBirth = DateOfBirthInput.toApiIsoDate(uiDateOfBirth)
@@ -66,6 +67,7 @@ class AuthRepository(
                     dateOfBirth = apiDateOfBirth,
                     gender = gender.name,
                     city = resolvedCity,
+                    description = description.trim().ifBlank { null },
                 ),
             )
             sessionStore.save(
@@ -79,6 +81,7 @@ class AuthRepository(
                 email = email.trim().lowercase(),
                 dateOfBirth = uiDateOfBirth,
                 gender = gender,
+                description = description.trim(),
             )
         }.mapError()
     }
@@ -91,11 +94,13 @@ class AuthRepository(
         email: String,
         dateOfBirth: String = "",
         gender: Gender = Gender.MALE,
+        description: String = "",
     ): UserAccount {
         val profile = api.getProfile()
         return profile.toUserAccount(email).copy(
             dateOfBirth = dateOfBirth,
             gender = gender,
+            description = profile.description?.takeIf { it.isNotBlank() } ?: description,
         )
     }
 

@@ -77,7 +77,7 @@ fun AvatarCropScreen(
     LaunchedEffect(bitmap, cropSidePx) {
         val bmp = bitmap ?: return@LaunchedEffect
         if (cropSidePx > 0f) {
-            scale = AvatarCropUtils.initialCoverScale(bmp, cropSidePx)
+            scale = AvatarCropUtils.initialFitScale(bmp, cropSidePx)
             offsetX = 0f
             offsetY = 0f
         }
@@ -95,7 +95,7 @@ fun AvatarCropScreen(
                 modifier = Modifier.padding(horizontal = scaleDp(16f), vertical = scaleDp(14f)),
             )
             Text(
-                text = "Перемещайте и масштабируйте фото. Квадратная зона станет круглым аватаром.",
+                text = "Перемещайте и приближайте фото. Уменьшить меньше исходного размера нельзя.",
                 fontSize = scaleSp(13f),
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
                 modifier = Modifier.padding(horizontal = scaleDp(16f)),
@@ -143,10 +143,21 @@ fun AvatarCropScreen(
                                 .background(Color.Black.copy(alpha = 0.08f))
                                 .pointerInput(bmp, cropSidePx) {
                                     detectTransformGestures { _, pan, zoom, _ ->
-                                        val minScale = AvatarCropUtils.initialCoverScale(bmp, cropSidePx)
+                                        val minScale = AvatarCropUtils.initialFitScale(bmp, cropSidePx)
                                         scale = (scale * zoom).coerceIn(minScale, minScale * 4f)
                                         offsetX += pan.x
                                         offsetY += pan.y
+                                        val clamped = AvatarCropUtils.clampPan(
+                                            bitmap = bmp,
+                                            scale = scale,
+                                            cropSide = cropSidePx,
+                                            containerWidth = containerWidthPx,
+                                            containerHeight = containerHeightPx,
+                                            offsetX = offsetX,
+                                            offsetY = offsetY,
+                                        )
+                                        offsetX = clamped.first
+                                        offsetY = clamped.second
                                     }
                                 },
                             contentAlignment = Alignment.Center,
