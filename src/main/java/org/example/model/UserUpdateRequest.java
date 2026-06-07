@@ -39,7 +39,7 @@ public class UserUpdateRequest {
     private Integer maxAge;
 
     @Min(value = 1, message = "radiusKm must be positive")
-    @Max(value = 500, message = "radiusKm must not exceed 500")
+    @Max(value = 10000, message = "radiusKm must not exceed 10000")
     private Integer radiusKm;
 
     private List<Gender> preferredGenders;

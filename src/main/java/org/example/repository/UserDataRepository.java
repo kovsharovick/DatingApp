@@ -27,9 +27,16 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
                 AND u.is_hidden = FALSE
                 AND u.active_video_id IS NOT NULL
                 AND u.id <> :currentUserId
+                -- Фильтры текущего пользователя (свои предпочтения)
                 AND (:prefs IS NULL OR u.gender = ANY(CAST(:prefs AS public."GENDER"[])))
                 AND u.date_of_birth BETWEEN :minBirth AND :maxBirth
                 AND earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) <= :radiusMetres
+                -- Фильтры кандидата (взаимность)
+                AND (u.preferred_gender IS NULL 
+                     OR CAST(:currentGender AS public."GENDER") = ANY(string_to_array(u.preferred_gender, ',')::public."GENDER"[]))
+                AND u.min_age <= :currentAge AND u.max_age >= :currentAge
+                AND earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) <= (u.radius_km * 1000)
+                -- Исключения
                 AND u.id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = :currentUserId)
                 AND u.id NOT IN (SELECT blocker_id FROM user_blocks WHERE blocked_id = :currentUserId)
                 ORDER BY
@@ -45,6 +52,8 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
             @Param("minBirth") LocalDate minBirth,
             @Param("maxBirth") LocalDate maxBirth,
             @Param("currentBirth") LocalDate currentBirth,
+            @Param("currentGender") String currentGender,
+            @Param("currentAge") Integer currentAge,
             @Param("prefs") String prefs,
             @Param("limit") int limit
     );
@@ -58,23 +67,21 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
                 WHERE u.is_hidden = FALSE
                   AND u.active_video_id IS NOT NULL
                   AND u.id <> :currentUserId
+                  -- Фильтры текущего пользователя
                   AND (:prefs IS NULL OR u.gender = ANY(CAST(:prefs AS public."GENDER"[])))
                   AND u.date_of_birth BETWEEN :minBirth AND :maxBirth
                   AND earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) <= :radiusMetres
-                  AND u.id NOT IN (
-                      SELECT target_id FROM user_swipes
-                      WHERE swiper_id = :currentUserId AND direction = 'LIKE'
-                  )
-                  AND u.id NOT IN (
-                      SELECT target_id FROM user_swipes
-                      WHERE swiper_id = :currentUserId AND direction = 'DISLIKE'
-                  )
+                  -- Фильтры кандидата (взаимность)
+                  AND (u.preferred_gender IS NULL 
+                       OR CAST(:currentGender AS public."GENDER") = ANY(string_to_array(u.preferred_gender, ',')::public."GENDER"[]))
+                  AND u.min_age <= :currentAge AND u.max_age >= :currentAge
+                  AND earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) <= (u.radius_km * 1000)
+                  -- Исключаем тех, кого уже лайкнул или дизлайкнул
+                  AND u.id NOT IN (SELECT target_id FROM user_swipes WHERE swiper_id = :currentUserId AND direction = 'LIKE')
+                  AND u.id NOT IN (SELECT target_id FROM user_swipes WHERE swiper_id = :currentUserId AND direction = 'DISLIKE')
                   AND u.id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = :currentUserId)
                   AND u.id NOT IN (SELECT blocker_id FROM user_blocks WHERE blocked_id = :currentUserId)
-                  AND u.id NOT IN (
-                      SELECT target_id FROM user_swipes
-                      WHERE swiper_id = :currentUserId
-                  )
+                  AND u.id NOT IN (SELECT target_id FROM user_swipes WHERE swiper_id = :currentUserId)
                 ORDER BY 
                     earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) ASC,
                     ABS(DATE_PART('year', AGE(u.date_of_birth, :currentBirth))) ASC
@@ -88,10 +95,13 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
             @Param("minBirth") LocalDate minBirth,
             @Param("maxBirth") LocalDate maxBirth,
             @Param("currentBirth") LocalDate currentBirth,
+            @Param("currentGender") String currentGender,
+            @Param("currentAge") Integer currentAge,
             @Param("prefs") String prefs,
             @Param("limit") int limit
     );
 
+    // запасной запрос
     @Query(value = """
                 SELECT u.id, v.video_url
                 FROM user_data u
@@ -100,17 +110,22 @@ public interface UserDataRepository extends JpaRepository<UserData, Long> {
                 WHERE u.is_hidden = FALSE
                   AND u.active_video_id IS NOT NULL
                   AND u.id <> :currentUserId
+                  AND (u.preferred_gender IS NULL 
+                       OR CAST(:currentGender AS public."GENDER") = ANY(string_to_array(u.preferred_gender, ',')::public."GENDER"[]))
+                  AND u.min_age <= :currentAge AND u.max_age >= :currentAge
+                  AND earth_distance(ll_to_earth(c.latitude, c.longitude), ll_to_earth(:lat, :lon)) <= (u.radius_km * 1000)
                   AND u.id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = :currentUserId)
                   AND u.id NOT IN (SELECT blocker_id FROM user_blocks WHERE blocked_id = :currentUserId)
-                  AND u.id NOT IN (
-                      SELECT target_id FROM user_swipes
-                      WHERE swiper_id = :currentUserId AND direction = 'LIKE'
-                  )
+                  AND u.id NOT IN (SELECT target_id FROM user_swipes WHERE swiper_id = :currentUserId AND direction = 'LIKE')
                 ORDER BY random()
                 LIMIT :limit
             """, nativeQuery = true)
     List<Object[]> findFallbackCandidates(
             @Param("currentUserId") Long currentUserId,
+            @Param("lat") Double lat,
+            @Param("lon") Double lon,
+            @Param("currentGender") String currentGender,
+            @Param("currentAge") Integer currentAge,
             @Param("limit") int limit
     );
 

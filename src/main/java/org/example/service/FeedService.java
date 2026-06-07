@@ -111,18 +111,22 @@ public class FeedService {
         LocalDate minBirth = now.minusYears(currentUser.getMaxAge() != null ? currentUser.getMaxAge() : 99);
         LocalDate maxBirth = now.minusYears(currentUser.getMinAge() != null ? currentUser.getMinAge() : 18);
         String prefs = buildPrefsLiteral(currentUser.getPreferredGenders());
+        int currentAge = Period.between(currentUser.getDateOfBirth(), now).getYears();
+        String currentGender = currentUser.getGender().name();
 
         List<Object[]> rows = userDataRepository.findPriorityCandidates(
                 userId, lat, lon, (double) radiusM, minBirth, maxBirth,
-                currentUser.getDateOfBirth(), prefs, limit);
+                currentUser.getDateOfBirth(), currentGender, currentAge, prefs, limit);
         if (!rows.isEmpty()) return extractIds(rows);
 
         rows = userDataRepository.findRegularCandidates(
                 userId, lat, lon, (double) radiusM, minBirth, maxBirth,
-                currentUser.getDateOfBirth(), prefs, limit);
+                currentUser.getDateOfBirth(), currentGender, currentAge, prefs, limit);
         if (!rows.isEmpty()) return extractIds(rows);
 
-        return Collections.emptyList();
+        rows = userDataRepository.findFallbackCandidates(
+                userId, lat, lon, currentGender, currentAge, limit);
+        return extractIds(rows);
     }
 
     private List<Long> extractIds(List<Object[]> rows) {
@@ -135,7 +139,7 @@ public class FeedService {
         if (genders == null || genders.isEmpty()) return null;
         return genders.stream()
                 .map(Gender::name)
-                .collect(Collectors.joining("\",\"", "{\"", "\"}"));
+                .collect(Collectors.joining(",", "{", "}"));
     }
 
     private Set<Long> getUsersWhoLikedMe(Long currentUserId, List<Long> candidateIds) {
